@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/*
+ * One committed look, not a light/dark toggle: the whole product (this
+ * dashboard and the Chrome capture extension) shares one palette grounded in
+ * a Catan board -- open water behind the chrome, parchment-colored tiles
+ * holding data. See extension/popup.css for the same tokens on that surface.
+ */
+@theme {
+  --color-ocean: #0f2e3d;
+  --color-ocean-deep: #0a2029;
+  --color-parchment: #efe7d8;
+  --color-parchment-dim: #e2d8c4;
+  --color-ink: #2b2118;
+  --color-ink-dim: #6b5e4d;
+  --color-brick: #ad4e2e;
+  --color-brick-hover: #c05a35;
+  --color-wheat: #d4a537;
+  --color-seafoam: #a9c2c9;
+  --color-seafoam-dim: #6f8990;
+  /* Two error tones for the two surfaces: --color-error reads on the dark
+     ocean background, --color-error-ink on a parchment panel (the same
+     split the capture extension makes for the same reason -- brick itself
+     doesn't clear text contrast on either surface reliably). */
+  --color-error: #e68a6c;
+  --color-error-ink: #9a3324;
+  --color-hairline: rgba(169, 194, 201, 0.15);
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ocean);
+  color: var(--color-seafoam);
+  font-family: var(--font-body);
+}
+
+body {
+  margin: 0;
+}
+
+::selection {
+  background: var(--color-brick);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brick);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

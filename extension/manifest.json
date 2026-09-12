@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Colonist Replay Capture",
+  "version": "1.0.0",
+  "description": "Captures colonist.io's /api/replay/data-from-game-id responses for download as JSON or direct upload to a local extractor backend.",
+  "permissions": ["storage", "downloads"],
+  "host_permissions": [
+    "https://colonist.io/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://colonist.io/*"],
+      "js": ["inject.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://colonist.io/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Colonist Replay Capture"
+  }
+}

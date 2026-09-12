@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.env
+cookies.txt
+
+# Frontend
+app/node_modules/
+app/build/
+app/.react-router/
+
+# Real opponents' data -- don't commit without checking (see CLAUDE.md)
+game_data.json
+decoded.json
+game.json
+*.html
