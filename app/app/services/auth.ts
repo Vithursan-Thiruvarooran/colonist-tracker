@@ -15,12 +15,16 @@ export function getToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }
 
+export const AUTH_CHANGED_EVENT = "auth-changed";
+
 export function setToken(token: string): void {
   localStorage.setItem(AUTH_TOKEN_KEY, token);
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 }
 
 export function clearToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
 }
 
 export function isLoggedIn(): boolean {
