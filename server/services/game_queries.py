@@ -57,7 +57,12 @@ async def get_player_stats(db: AsyncIOMotorDatabase) -> List[PlayerAggregateStat
                 "avg_rank": {"$avg": "$players.rank"},
             }
         },
-        {"$sort": {"games_played": -1}},
+        # Name as a tiebreaker: most players in a public match-history pull
+        # were faced exactly once, and Mongo doesn't guarantee stable order
+        # across ties on games_played alone -- without it, the dashboard's
+        # "most-played" chart cap would reshuffle its cut-off players on
+        # every reload.
+        {"$sort": {"games_played": -1, "name": 1}},
     ]
 
     results = []

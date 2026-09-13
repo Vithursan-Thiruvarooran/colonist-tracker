@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { DiceRollChart } from "../components/charts/DiceRollChart";
+import { DivergingBarChart, type DivergingBarRow } from "../components/charts/DivergingBarChart";
+import { GroupedBarChart } from "../components/charts/GroupedBarChart";
+import { StackedCompositionChart } from "../components/charts/StackedCompositionChart";
 import { Badge } from "../components/ui/Badge";
 import { Panel, RawPanel } from "../components/ui/Panel";
+import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
-import { CHART_INK, SEQUENTIAL_HUE, categoricalColor } from "../lib/chartTheme";
+import { categoricalColor } from "../lib/chartTheme";
 import { getGame, type GameDetail as GameDetailType } from "../services/games";
 
 const VP_SOURCES: { key: string; label: string }[] = [
@@ -14,6 +18,13 @@ const VP_SOURCES: { key: string; label: string }[] = [
   { key: "victory_point_cards", label: "VP Cards" },
   { key: "largest_army", label: "Largest Army" },
   { key: "longest_road", label: "Longest Road" },
+];
+
+const RESOURCE_INCOME_SOURCES: { key: string; label: string }[] = [
+  { key: "rollingIncome", label: "From rolls" },
+  { key: "robbingIncome", label: "From robbing" },
+  { key: "tradeIncome", label: "From trades" },
+  { key: "devCardIncome", label: "From dev cards" },
 ];
 
 const RESOURCE_STATS: { key: string; label: string }[] = [
@@ -32,12 +43,9 @@ const ACTIVITY_STATS: { key: string; label: string }[] = [
   { key: "devCardsUsed", label: "Dev cards used" },
 ];
 
-const tooltipStyle = {
-  background: CHART_INK.tooltipBg,
-  border: `1px solid ${CHART_INK.tooltipBorder}`,
-  borderRadius: 6,
-  fontSize: 12,
-};
+function formatCount(value: number): string {
+  return value >= 0 ? `+${value}` : String(value);
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -77,15 +85,35 @@ export default function GameDetail() {
   }
 
   const playersByRank = [...game.players].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+
   const vpChartData = playersByRank.map((p) => {
     const row: Record<string, string | number> = { name: p.name };
     for (const source of VP_SOURCES) row[source.key] = p.victory_points_by_source[source.key] ?? 0;
     return row;
   });
 
-  const diceChartData = Object.entries(game.dice_roll_distribution)
-    .map(([roll, count]) => ({ roll: Number(roll), count }))
-    .sort((a, b) => a.roll - b.roll);
+  const resourceIncomeData = playersByRank.map((p) => {
+    const row: Record<string, string | number> = { name: p.name };
+    for (const source of RESOURCE_INCOME_SOURCES) row[source.key] = p.resource_stats[source.key] ?? 0;
+    return row;
+  });
+
+  const netResourceRows: DivergingBarRow[] = playersByRank.map((p) => ({
+    name: p.name,
+    value: (p.resource_stats.totalResourceIncome ?? 0) - (p.resource_stats.totalResourceLoss ?? 0),
+  }));
+
+  const tradesData = playersByRank.map((p) => ({
+    name: p.name,
+    proposedTrades: p.activity_stats.proposedTrades ?? 0,
+    successfulTrades: p.activity_stats.successfulTrades ?? 0,
+  }));
+
+  const devCardsData = playersByRank.map((p) => ({
+    name: p.name,
+    devCardsBought: p.activity_stats.devCardsBought ?? 0,
+    devCardsUsed: p.activity_stats.devCardsUsed ?? 0,
+  }));
 
   return (
     <div>
@@ -102,55 +130,61 @@ export default function GameDetail() {
         {game.winner && <Badge tone="winner">Winner: {game.winner.name}</Badge>}
       </div>
 
-      <h2 className="mb-2 font-display text-lg font-medium text-parchment">Victory points by source</h2>
+      <SectionHeader title="Victory points by source" caption="Where each player's final score came from." />
       <Panel className="mb-6">
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={vpChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_INK.grid} vertical={false} />
-              <XAxis dataKey="name" stroke={CHART_INK.axis} tick={{ fill: CHART_INK.secondary, fontSize: 12 }} />
-              <YAxis
-                stroke={CHART_INK.axis}
-                tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-                allowDecimals={false}
-              />
-              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: CHART_INK.primary }} />
-              <Legend wrapperStyle={{ fontSize: 12, color: CHART_INK.secondary }} />
-              {VP_SOURCES.map((source, i) => (
-                <Bar
-                  key={source.key}
-                  dataKey={source.key}
-                  name={source.label}
-                  stackId="vp"
-                  fill={categoricalColor(i)}
-                  radius={i === VP_SOURCES.length - 1 ? [4, 4, 0, 0] : 0}
-                />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <StackedCompositionChart data={vpChartData} sources={VP_SOURCES} />
       </Panel>
 
-      <h2 className="mb-2 font-display text-lg font-medium text-parchment">Dice rolls this game</h2>
+      <SectionHeader
+        title="Dice rolls this game"
+        caption="Actual roll counts against the theoretical 2d6 distribution — small samples swing further from the dashed line than the full-history chart."
+      />
       <Panel className="mb-6">
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={diceChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_INK.grid} vertical={false} />
-              <XAxis dataKey="roll" stroke={CHART_INK.axis} tick={{ fill: CHART_INK.secondary, fontSize: 12 }} />
-              <YAxis
-                stroke={CHART_INK.axis}
-                tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-                allowDecimals={false}
-              />
-              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: CHART_INK.primary }} />
-              <Bar dataKey="count" name="Rolls" fill={SEQUENTIAL_HUE} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <DiceRollChart distribution={game.dice_roll_distribution} />
       </Panel>
 
-      <h2 className="mb-2 font-display text-lg font-medium text-parchment">Player stats</h2>
+      <SectionHeader
+        title="Resource economy"
+        caption="Where resources came from, and who ended up ahead once losses (robbed, discarded, spent) are netted out."
+      />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Income by source</h3>
+          <StackedCompositionChart data={resourceIncomeData} sources={RESOURCE_INCOME_SOURCES} height={240} />
+        </Panel>
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Net resources (income − loss)</h3>
+          <DivergingBarChart data={netResourceRows} formatValue={formatCount} height={240} />
+        </Panel>
+      </div>
+
+      <SectionHeader title="Trades & development cards" caption="Volume alongside follow-through, not just totals." />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Trades</h3>
+          <GroupedBarChart
+            data={tradesData}
+            series={[
+              { key: "proposedTrades", label: "Proposed", color: categoricalColor(0) },
+              { key: "successfulTrades", label: "Completed", color: categoricalColor(1) },
+            ]}
+            height={220}
+          />
+        </Panel>
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Development cards</h3>
+          <GroupedBarChart
+            data={devCardsData}
+            series={[
+              { key: "devCardsBought", label: "Bought", color: categoricalColor(0) },
+              { key: "devCardsUsed", label: "Used", color: categoricalColor(1) },
+            ]}
+            height={220}
+          />
+        </Panel>
+      </div>
+
+      <SectionHeader title="Player stats" caption="Every metric above, in full precision." />
       <Panel className="mb-6">
         <Table>
           <thead>

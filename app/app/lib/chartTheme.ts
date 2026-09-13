@@ -25,6 +25,21 @@ const CATEGORICAL = [
 // reuses categorical slot 1 so "blue" means one consistent thing app-wide.
 export const SEQUENTIAL_HUE = CATEGORICAL[0];
 
+// Diverging pair (blue <-> red, the two poles that already sit at categorical
+// slots 1 and 8) for polarity data -- e.g. net resource gain/loss. Validated
+// all-pairs against the parchment surface: worst CVD delta E 21.6, normal-vision
+// 32.3, both clear of the gate. Neutral midpoint is the same gray as the grid.
+export const DIVERGING = {
+  positive: CATEGORICAL[0], // blue -- net gain
+  negative: CATEGORICAL[7], // red -- net loss
+  neutral: "#ddd0ba",
+};
+
+// Muted reference-line color for a theoretical/expected value plotted
+// alongside real data (e.g. uniform dice odds) -- never a categorical slot,
+// so it reads as "context," not a competing series.
+export const REFERENCE_LINE = "#8a7c64";
+
 export const CHART_INK = {
   primary: "#2b2118",
   secondary: "#6b5e4d", // axis/tick labels -- ~5.1:1 on parchment, clears AA
