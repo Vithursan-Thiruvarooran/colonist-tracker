@@ -1,10 +1,30 @@
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { DiceRollChart } from "../components/charts/DiceRollChart";
+import { PlayerScatterChart } from "../components/charts/PlayerScatterChart";
+import { RankedBarChart, type RankedBarRow } from "../components/charts/RankedBarChart";
+import { TimeSeriesLineChart, type TimeSeriesPoint } from "../components/charts/TimeSeriesLineChart";
 import { Panel } from "../components/ui/Panel";
+import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
-import { CHART_INK, SEQUENTIAL_HUE, categoricalColorForName } from "../lib/chartTheme";
-import { getPlayerStats, getStatsOverview, type PlayerAggregateStats, type StatsOverview } from "../services/games";
+import { SEQUENTIAL_HUE } from "../lib/chartTheme";
+import {
+  getPlayerStats,
+  getStatsOverview,
+  listGames,
+  type GameSummary,
+  type PlayerAggregateStats,
+  type StatsOverview,
+} from "../services/games";
+
+const TREND_GAME_LIMIT = 100;
+// A public match-history pull can rope in dozens of one-off opponents faced
+// only once. Ranking every one of them turns the chart into an unreadable
+// smear and forces 8 categorical hues to repeat, so player-performance
+// charts focus on whoever's been seen the most -- the comparison that's
+// actually statistically meaningful, and the same subset across all three
+// charts. The full roster stays in the table below.
+const MAX_RANKED_PLAYERS = 10;
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
@@ -15,23 +35,31 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-const tooltipStyle = {
-  background: CHART_INK.tooltipBg,
-  border: `1px solid ${CHART_INK.tooltipBorder}`,
-  borderRadius: 6,
-  fontSize: 12,
-};
+function formatPercent(value: number): string {
+  return `${value.toFixed(0)}%`;
+}
+
+function formatVp(value: number): string {
+  return value.toFixed(1);
+}
+
+function shortDate(iso: string | null): string {
+  if (!iso) return "?";
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export default function Stats() {
   const [players, setPlayers] = useState<PlayerAggregateStats[] | null>(null);
   const [overview, setOverview] = useState<StatsOverview | null>(null);
+  const [recentGames, setRecentGames] = useState<GameSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getPlayerStats(), getStatsOverview()])
-      .then(([p, o]) => {
+    Promise.all([getPlayerStats(), getStatsOverview(), listGames({ limit: TREND_GAME_LIMIT })])
+      .then(([p, o, games]) => {
         setPlayers(p);
         setOverview(o);
+        setRecentGames(games);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"));
   }, []);
@@ -40,25 +68,48 @@ export default function Stats() {
     return <p className="text-sm text-error">{error}</p>;
   }
 
-  if (!players || !overview) {
+  if (!players || !overview || !recentGames) {
     return <p className="text-sm text-seafoam-dim">Loading…</p>;
   }
 
-  const allNames = players.map((p) => p.name);
-  const winRateData = [...players]
-    .sort((a, b) => b.win_rate - a.win_rate)
-    .map((p) => ({ name: p.name, win_rate: Math.round(p.win_rate * 1000) / 10 }));
+  const rankedPlayers = [...players].sort((a, b) => b.games_played - a.games_played).slice(0, MAX_RANKED_PLAYERS);
 
-  const diceChartData = Object.entries(overview.dice_roll_distribution)
-    .map(([roll, count]) => ({ roll: Number(roll), count }))
-    .sort((a, b) => a.roll - b.roll);
+  const winRateRows: RankedBarRow[] = [...rankedPlayers]
+    .sort((a, b) => b.win_rate - a.win_rate)
+    .map((p) => ({ name: p.name, value: Math.round(p.win_rate * 1000) / 10, color: SEQUENTIAL_HUE }));
+
+  const avgVpRows: RankedBarRow[] = rankedPlayers
+    .filter((p) => p.avg_final_victory_points != null)
+    .sort((a, b) => (b.avg_final_victory_points ?? 0) - (a.avg_final_victory_points ?? 0))
+    .map((p) => ({ name: p.name, value: p.avg_final_victory_points ?? 0, color: SEQUENTIAL_HUE }));
+
+  const scatterData = rankedPlayers
+    .filter((p) => p.avg_final_victory_points != null && p.games_played > 0)
+    .map((p) => ({
+      name: p.name,
+      x: p.avg_final_victory_points ?? 0,
+      y: Math.round(p.win_rate * 1000) / 10,
+      z: p.games_played,
+    }));
+
+  // listGames returns most-recent-first; charting a trend reads left-to-right
+  // as it happened, so flip to chronological order.
+  const chronoGames = [...recentGames].reverse();
+  const durationTrend: TimeSeriesPoint[] = chronoGames
+    .filter((g) => g.duration_ms != null)
+    .map((g) => ({ label: shortDate(g.played_at), value: Math.round((g.duration_ms ?? 0) / 60000) }));
+  const turnsTrend: TimeSeriesPoint[] = chronoGames
+    .filter((g) => g.total_turns != null)
+    .map((g) => ({ label: shortDate(g.played_at), value: g.total_turns ?? 0 }));
 
   return (
     <div>
-      <h1 className="mb-5 font-display text-2xl font-medium text-parchment">Stats</h1>
+      <h1 className="mb-1 font-display text-2xl font-medium text-parchment">Stats</h1>
+      <p className="mb-5 text-sm text-seafoam-dim">Aggregated across every game ingested from colonist.io.</p>
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Total games" value={String(overview.total_games)} />
+        <StatTile label="Players tracked" value={String(players.length)} />
         <StatTile
           label="Avg duration"
           value={overview.avg_duration_ms != null ? `${Math.round(overview.avg_duration_ms / 60000)} min` : "—"}
@@ -69,61 +120,70 @@ export default function Stats() {
         />
       </div>
 
-      <h2 className="mb-2 mt-6 font-display text-lg font-medium text-parchment">Win rate by player</h2>
+      <SectionHeader
+        title="Player performance"
+        caption={
+          players.length > MAX_RANKED_PLAYERS
+            ? `Win rate and average scoring for the ${rankedPlayers.length} most-played of ${players.length} players seen — the full roster, including one-off opponents, is in the table below.`
+            : "Win rate and average scoring, ranked highest first."
+        }
+      />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Win rate</h3>
+          <RankedBarChart data={winRateRows} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+        </Panel>
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Avg victory points</h3>
+          <RankedBarChart data={avgVpRows} domain={[0, "auto"]} formatValue={formatVp} />
+        </Panel>
+      </div>
+
+      {scatterData.length > 1 && (
+        <Panel className="mt-3">
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Scoring efficiency vs. win rate</h3>
+          <p className="mb-3 text-xs text-ink-dim/70">
+            Bubble size is games played — a high win rate over a handful of games reads differently than one over
+            dozens.
+          </p>
+          <PlayerScatterChart
+            data={scatterData}
+            xLabel="Avg victory points"
+            yLabel="Win rate"
+            formatX={formatVp}
+            formatY={formatPercent}
+          />
+        </Panel>
+      )}
+
+      <SectionHeader
+        title="Dice rolls across all games"
+        caption="Actual roll counts against the theoretical 2d6 distribution — the dashed line is what pure odds predict at this sample size."
+      />
       <Panel className="mb-6">
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={winRateData} layout="vertical" margin={{ left: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_INK.grid} horizontal={false} />
-              <XAxis
-                type="number"
-                domain={[0, 100]}
-                unit="%"
-                stroke={CHART_INK.axis}
-                tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-              />
-              <YAxis
-                type="category"
-                dataKey="name"
-                width={100}
-                stroke={CHART_INK.axis}
-                tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                labelStyle={{ color: CHART_INK.primary }}
-                formatter={(value) => [`${value}%`, "Win rate"]}
-              />
-              <Bar dataKey="win_rate" radius={[0, 4, 4, 0]}>
-                {winRateData.map((row) => (
-                  <Cell key={row.name} fill={categoricalColorForName(row.name, allNames)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <DiceRollChart distribution={overview.dice_roll_distribution} />
       </Panel>
 
-      <h2 className="mb-2 mt-6 font-display text-lg font-medium text-parchment">Dice rolls across all games</h2>
-      <Panel className="mb-6">
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={diceChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_INK.grid} vertical={false} />
-              <XAxis dataKey="roll" stroke={CHART_INK.axis} tick={{ fill: CHART_INK.secondary, fontSize: 12 }} />
-              <YAxis
-                stroke={CHART_INK.axis}
-                tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-                allowDecimals={false}
-              />
-              <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: CHART_INK.primary }} />
-              <Bar dataKey="count" name="Rolls" fill={SEQUENTIAL_HUE} radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Panel>
+      {(durationTrend.length > 1 || turnsTrend.length > 1) && (
+        <>
+          <SectionHeader
+            title="Game length trends"
+            caption={`Across the last ${chronoGames.length} game${chronoGames.length === 1 ? "" : "s"}, in play order.`}
+          />
+          <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <Panel>
+              <h3 className="mb-3 text-sm font-medium text-ink-dim">Duration (minutes)</h3>
+              <TimeSeriesLineChart data={durationTrend} formatValue={(v) => `${v} min`} />
+            </Panel>
+            <Panel>
+              <h3 className="mb-3 text-sm font-medium text-ink-dim">Turns</h3>
+              <TimeSeriesLineChart data={turnsTrend} formatValue={(v) => `${v} turns`} />
+            </Panel>
+          </div>
+        </>
+      )}
 
-      <h2 className="mb-2 mt-6 font-display text-lg font-medium text-parchment">Player stats</h2>
+      <SectionHeader title="Player stats" caption="Every metric above, in full precision." />
       <Panel>
         <Table>
           <thead>
