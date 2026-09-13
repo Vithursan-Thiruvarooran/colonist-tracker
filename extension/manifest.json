@@ -3,7 +3,7 @@
   "name": "Colonist Replay Capture",
   "version": "1.0.0",
   "description": "Captures colonist.io's /api/replay/data-from-game-id responses for download as JSON or direct upload to a local extractor backend.",
-  "permissions": ["storage", "downloads"],
+  "permissions": ["storage", "downloads", "alarms"],
   "host_permissions": [
     "https://colonist.io/*",
     "http://localhost:8000/*",
