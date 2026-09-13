@@ -89,7 +89,7 @@ export default function GameDetail() {
 
   return (
     <div>
-      <Link to="/" className="mb-3 inline-block text-sm text-seafoam hover:text-parchment">
+      <Link to="/games" className="mb-3 inline-block text-sm text-seafoam hover:text-parchment">
         ← All games
       </Link>
       <h1 className="font-display text-2xl font-medium text-parchment">Game {game.game_id}</h1>
