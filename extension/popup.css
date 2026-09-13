@@ -109,7 +109,26 @@ body {
 .capture__time {
   color: #6b5e4d;
   font-size: 11px;
-  margin: 1px 0 8px;
+  margin: 1px 0 4px;
+}
+
+.capture__status {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.capture__status--unsent {
+  color: #6b5e4d;
+}
+
+.capture__status--sent,
+.capture__status--skipped {
+  color: #4d7a5a;
+}
+
+.capture__status--failed {
+  color: var(--brick);
 }
 
 .capture__actions {

@@ -24,6 +24,29 @@ normally and capture as you go.
   backend** (`POST`s `{"raw": <payload>}` to the configured backend URL —
   `server`'s `POST /api/games/ingest` endpoint accepts this shape directly).
 
+## Expiry
+
+Captures older than 24h are dropped automatically — `background.js` runs an
+hourly `chrome.alarms` prune, and the popup also prunes defensively on open
+(in case the alarm hasn't fired yet, e.g. right after install). This just
+keeps `chrome.storage.local` from accumulating stale games; it isn't a
+statement about how long colonist.io itself keeps replays available.
+
+## Send status
+
+Each capture persists a send status (`unsent` / `sent` / `already stored` /
+`failed to send`, with the error on hover) in `chrome.storage.local`, shown as
+a label under its timestamp — so it survives closing and reopening the popup,
+not just the transient button text during a send. The toolbar badge also
+reflects it: it turns red with a failure count whenever any capture has
+failed to send, otherwise it shows the green total-captures count as before.
+
+**Resend unsent/failed** appears above the list whenever there's at least one
+capture that hasn't been successfully sent yet, and only retries those —
+already-sent captures are left alone (though their per-row **Resend** button
+still lets you manually re-send a specific one, e.g. after re-ingesting on
+the backend).
+
 ## Load it
 
 1. `chrome://extensions` → enable Developer mode → **Load unpacked** → select

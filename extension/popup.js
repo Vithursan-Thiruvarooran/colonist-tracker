@@ -1,4 +1,5 @@
 const DEFAULT_BACKEND_URL = "http://localhost:8000/api/games/ingest";
+const MAX_CAPTURE_AGE_MS = 24 * 60 * 60 * 1000;
 
 const listEl = document.getElementById("captures");
 const emptyEl = document.getElementById("empty");
@@ -13,8 +14,6 @@ const authStatusEl = document.getElementById("auth-status");
 
 let currentCaptures = [];
 const sendButtons = new Map();
-
-chrome.action.setBadgeText({ text: "" });
 
 chrome.storage.local.get({ backendUrl: DEFAULT_BACKEND_URL }, ({ backendUrl }) => {
   backendInput.value = backendUrl;
@@ -81,16 +80,55 @@ function relativeTime(timestamp) {
   return `Captured ${days}d ago`;
 }
 
+// Captures expire 24h after capture. The background service worker prunes
+// them on an hourly alarm, but that alarm may not have fired since the last
+// capture (e.g. right after install, or if the worker was asleep) -- so the
+// popup also prunes defensively whenever it reads the list.
+function pruneExpired(captures) {
+  const cutoff = Date.now() - MAX_CAPTURE_AGE_MS;
+  return captures.filter((c) => c.capturedAt > cutoff);
+}
+
+// Statuses are persisted in chrome.storage.local (not just reflected in
+// transient button text) so "did this send succeed?" survives closing and
+// reopening the popup. Missing status (captures written before this field
+// existed) is treated as "unsent".
+function statusOf(capture) {
+  return capture.status || "unsent";
+}
+
+function statusLabel(capture) {
+  switch (statusOf(capture)) {
+    case "sent":
+      return "Sent";
+    case "skipped":
+      return "Already stored";
+    case "failed":
+      return "Failed to send";
+    default:
+      return "Not sent yet";
+  }
+}
+
+async function patchCapture(gameId, patch) {
+  const { captures } = await chrome.storage.local.get({ captures: [] });
+  const next = captures.map((c) => (c.gameId === gameId ? { ...c, ...patch } : c));
+  await chrome.storage.local.set({ captures: next });
+}
+
 function render(captures) {
   currentCaptures = captures;
   sendButtons.clear();
   listEl.innerHTML = "";
   emptyEl.hidden = captures.length > 0;
 
-  bulkRowEl.hidden = captures.length < 2;
-  bulkCountEl.textContent = `${captures.length} captured`;
+  const unresolved = captures.filter((c) => statusOf(c) === "unsent" || statusOf(c) === "failed");
+  bulkRowEl.hidden = unresolved.length === 0;
+  bulkCountEl.textContent = `${unresolved.length} unsent/failed`;
 
   for (const capture of captures) {
+    const status = statusOf(capture);
+
     const li = document.createElement("li");
     li.className = "capture";
 
@@ -110,6 +148,11 @@ function render(captures) {
     timeEl.textContent = relativeTime(capture.capturedAt);
     timeEl.title = new Date(capture.capturedAt).toLocaleString();
 
+    const statusEl = document.createElement("div");
+    statusEl.className = `capture__status capture__status--${status}`;
+    statusEl.textContent = statusLabel(capture);
+    if (status === "failed" && capture.lastError) statusEl.title = capture.lastError;
+
     const actions = document.createElement("div");
     actions.className = "capture__actions";
 
@@ -120,12 +163,12 @@ function render(captures) {
 
     const sendBtn = document.createElement("button");
     sendBtn.className = "btn btn--primary";
-    sendBtn.textContent = "Send to backend";
+    sendBtn.textContent = status === "sent" || status === "skipped" ? "Resend" : "Send to backend";
     sendBtn.addEventListener("click", () => sendCapture(capture, sendBtn));
     sendButtons.set(capture.gameId, sendBtn);
 
     actions.append(downloadBtn, sendBtn);
-    body.append(idEl, timeEl, actions);
+    body.append(idEl, timeEl, statusEl, actions);
     li.append(tile, body);
     listEl.appendChild(li);
   }
@@ -136,8 +179,9 @@ sendAllBtn.addEventListener("click", async () => {
   sendAllBtn.disabled = true;
 
   const targets = currentCaptures.filter((c) => {
+    const status = statusOf(c);
     const button = sendButtons.get(c.gameId);
-    return button && !button.disabled;
+    return (status === "unsent" || status === "failed") && button && !button.disabled;
   });
 
   for (let i = 0; i < targets.length; i++) {
@@ -146,7 +190,7 @@ sendAllBtn.addEventListener("click", async () => {
     await sendCapture(targets[i], button);
   }
 
-  sendAllBtn.textContent = "All sent";
+  sendAllBtn.textContent = "Done";
   setTimeout(() => {
     sendAllBtn.disabled = false;
     sendAllBtn.textContent = originalText;
@@ -192,9 +236,12 @@ async function sendCapture(capture, button) {
     }
 
     const result = await response.json();
+    const status = result.status === "skipped" ? "skipped" : "sent";
+    await patchCapture(capture.gameId, { status, sentAt: Date.now(), lastError: null });
     button.classList.add("btn--sent");
-    button.textContent = result.status === "skipped" ? "Already stored" : "Sent";
+    button.textContent = status === "skipped" ? "Already stored" : "Sent";
   } catch (err) {
+    await patchCapture(capture.gameId, { status: "failed", lastError: String(err) });
     button.textContent = "Failed to send";
     button.title = String(err);
   } finally {
@@ -207,7 +254,16 @@ async function sendCapture(capture, button) {
   }
 }
 
-chrome.storage.local.get({ captures: [] }, ({ captures }) => render(captures));
+async function loadCaptures() {
+  const { captures } = await chrome.storage.local.get({ captures: [] });
+  const fresh = pruneExpired(captures);
+  if (fresh.length !== captures.length) {
+    await chrome.storage.local.set({ captures: fresh });
+  }
+  render(fresh);
+}
+
+loadCaptures();
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.captures) render(changes.captures.newValue || []);
+  if (area === "local" && changes.captures) render(pruneExpired(changes.captures.newValue || []));
 });
