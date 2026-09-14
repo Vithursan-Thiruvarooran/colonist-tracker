@@ -49,7 +49,7 @@ export default function Ingest() {
     }
   }
 
-  if (status === "loading") return null;
+  if (status === "loading") return <p className="text-sm text-seafoam-dim">Loading…</p>;
 
   if (status === "unauthorized") {
     return (

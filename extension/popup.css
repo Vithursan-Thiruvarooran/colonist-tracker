@@ -122,6 +122,12 @@ body {
   color: #6b5e4d;
 }
 
+.capture__status--sending {
+  /* Darker than --wheat so it stays readable as text on the light
+     parchment background (--wheat itself is only used as a button fill). */
+  color: #8a6a1f;
+}
+
 .capture__status--sent,
 .capture__status--skipped {
   color: #4d7a5a;

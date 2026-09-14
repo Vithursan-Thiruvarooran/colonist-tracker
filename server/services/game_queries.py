@@ -21,7 +21,11 @@ _LIST_VIEW_EXCLUDED_FIELDS = {
 
 
 async def list_games(
-    db: AsyncIOMotorDatabase, limit: int, skip: int, player: Optional[str]
+    db: AsyncIOMotorDatabase,
+    limit: int,
+    skip: int,
+    player: Optional[str],
+    sort_by: str = "played_at",
 ) -> List[GameSummary]:
     query: dict = {}
     if player:
@@ -29,7 +33,7 @@ async def list_games(
 
     cursor = (
         db.games.find(query, _LIST_VIEW_EXCLUDED_FIELDS)
-        .sort("played_at", -1)
+        .sort(sort_by, -1)
         .skip(skip)
         .limit(limit)
     )

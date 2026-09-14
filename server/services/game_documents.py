@@ -32,6 +32,7 @@ def build_game_document(raw: dict, source_username: str, player_color: Optional[
 
     resource_stats_by_name = decoded.get("resource_stats_by_player", {})
     activity_stats_by_name = decoded.get("activity_stats_by_player", {})
+    dev_cards_by_name = decoded.get("dev_cards_by_player", {})
 
     players = []
     winner = None
@@ -40,6 +41,7 @@ def build_game_document(raw: dict, source_username: str, player_color: Optional[
         merged_player = dict(player)
         merged_player["resource_stats"] = resource_stats_by_name.get(name, {})
         merged_player["activity_stats"] = activity_stats_by_name.get(name, {})
+        merged_player["dev_cards"] = dev_cards_by_name.get(name, {})
         players.append(merged_player)
         if player.get("is_winner"):
             winner = {"user_id": player.get("user_id"), "name": name, "color": player.get("color")}

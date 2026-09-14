@@ -187,6 +187,15 @@ DEV_CARD_NAMES = {
     DevCard.ROAD_BUILDING: "Road Building",
     DevCard.YEAR_OF_PLENTY: "Year of Plenty",
 }
+# snake_case keys for dev_cards_by_player()'s output, one per DevCard plus the
+# "unknown" bucket below.
+DEV_CARD_STAT_NAMES = {
+    DevCard.KNIGHT: "knight",
+    DevCard.VICTORY_POINT: "victory_point",
+    DevCard.MONOPOLY: "monopoly",
+    DevCard.ROAD_BUILDING: "road_building",
+    DevCard.YEAR_OF_PLENTY: "year_of_plenty",
+}
 TILE_TYPE_NAMES = {
     TileType.DESERT: "Desert",
     TileType.FOREST: "Forest",
@@ -292,6 +301,47 @@ def build_merged_gamelog(event_history: dict) -> dict:
     for event in event_history.get("events", []):
         log.update(event.get("stateChange", {}).get("gameLogState", {}))
     return log
+
+
+def dev_cards_by_player(merged_log: dict, players: list) -> dict:
+    """Per-player dev card counts by type, keyed by player name.
+
+    A dev card's type is public once played (MessageType.DEV_CARD_PLAYED
+    carries cardEnum), but colonist.io never reveals a bought card's type
+    while it sits unplayed in a hand -- MessageType.DEV_CARD_BOUGHT carries
+    no cardEnum (confirmed: every such entry in a real game omits it,
+    including the perspective player's own purchases). So a still-unplayed
+    card's type is only knowable for VICTORY_POINT (it's never played, and
+    victory_points_by_source's count for a player is exactly their unplayed
+    VICTORY_POINT holdings); any remaining bought-but-unaccounted-for cards
+    go to "unknown" rather than being guessed at.
+    """
+    bought_by_color: dict = {}
+    played_by_color: dict = {}
+    for entry in merged_log.values():
+        entry_text = entry.get("text", {})
+        color = entry_text.get("playerColor")
+        if entry_text.get("type") == MessageType.DEV_CARD_BOUGHT:
+            bought_by_color[color] = bought_by_color.get(color, 0) + 1
+        elif entry_text.get("type") == MessageType.DEV_CARD_PLAYED:
+            card = entry_text.get("cardEnum")
+            played_by_color.setdefault(color, {})
+            played_by_color[color][card] = played_by_color[color].get(card, 0) + 1
+
+    result = {}
+    for player in players:
+        counts = {name: 0 for name in DEV_CARD_STAT_NAMES.values()}
+        counts["unknown"] = 0
+        played = played_by_color.get(player.color, {})
+        for card, count in played.items():
+            counts[DEV_CARD_STAT_NAMES.get(card, "unknown")] += count
+        vp_cards = player.victory_points_by_source.get("victory_point_cards", 0)
+        counts["victory_point"] += vp_cards
+        unaccounted = bought_by_color.get(player.color, 0) - sum(played.values()) - vp_cards
+        if unaccounted > 0:
+            counts["unknown"] += unaccounted
+        result[player.name] = counts
+    return result
 
 
 def resolve_players(data: dict) -> list:
@@ -465,6 +515,7 @@ def decode(data: dict) -> dict:
 
     eh = data.get("eventHistory", {})
     merged_log = build_merged_gamelog(eh)
+    dev_cards_by_name = dev_cards_by_player(merged_log, players)
 
     log_entries = []
     for idx in sorted(merged_log, key=int):
@@ -501,6 +552,7 @@ def decode(data: dict) -> dict:
         "dice_roll_distribution": end_state.get("diceStats"),
         "resource_stats_by_player": by_player(end_state.get("resourceStats"), color_to_name),
         "activity_stats_by_player": by_player(end_state.get("activityStats"), color_to_name),
+        "dev_cards_by_player": dev_cards_by_name,
         "log": [dataclasses.asdict(e) for e in log_entries],
     }
 

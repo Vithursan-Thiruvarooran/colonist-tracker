@@ -7,6 +7,7 @@ import { TimeSeriesLineChart, type TimeSeriesPoint } from "../components/charts/
 import { Panel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
+import { Tip } from "../components/ui/Tip";
 import { SEQUENTIAL_HUE } from "../lib/chartTheme";
 import {
   getPlayerStats,
@@ -26,10 +27,10 @@ const TREND_GAME_LIMIT = 100;
 // charts. The full roster stays in the table below.
 const MAX_RANKED_PLAYERS = 10;
 
-function StatTile({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
     <Panel>
-      <div className="text-xs text-ink-dim">{label}</div>
+      <div className="text-xs text-ink-dim">{tip ? <Tip text={tip}>{label}</Tip> : label}</div>
       <div className="mt-1 font-display text-3xl font-medium text-ink">{value}</div>
     </Panel>
   );
@@ -108,15 +109,25 @@ export default function Stats() {
       <p className="mb-5 text-sm text-seafoam-dim">Aggregated across every game ingested from colonist.io.</p>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Total games" value={String(overview.total_games)} />
-        <StatTile label="Players tracked" value={String(players.length)} />
+        <StatTile
+          label="Total games"
+          value={String(overview.total_games)}
+          tip="Games ingested from colonist.io's replay data."
+        />
+        <StatTile
+          label="Players tracked"
+          value={String(players.length)}
+          tip="Distinct players and bots seen across every ingested game."
+        />
         <StatTile
           label="Avg duration"
           value={overview.avg_duration_ms != null ? `${Math.round(overview.avg_duration_ms / 60000)} min` : "—"}
+          tip="Mean game length across all ingested games."
         />
         <StatTile
           label="Avg turns"
           value={overview.avg_total_turns != null ? overview.avg_total_turns.toFixed(1) : "—"}
+          tip="Mean number of turns across all ingested games."
         />
       </div>
 
@@ -142,7 +153,7 @@ export default function Stats() {
       {scatterData.length > 1 && (
         <Panel className="mt-3">
           <h3 className="mb-1 text-sm font-medium text-ink-dim">Scoring efficiency vs. win rate</h3>
-          <p className="mb-3 text-xs text-ink-dim/70">
+          <p className="mb-3 text-xs text-ink-dim">
             Bubble size is games played — a high win rate over a handful of games reads differently than one over
             dozens.
           </p>
@@ -189,11 +200,21 @@ export default function Stats() {
           <thead>
             <tr>
               <Th sticky>Player</Th>
-              <Th>Games</Th>
-              <Th>Wins</Th>
-              <Th>Win rate</Th>
-              <Th>Avg VP</Th>
-              <Th>Avg rank</Th>
+              <Th>
+                <Tip text="Games this player has appeared in.">Games</Tip>
+              </Th>
+              <Th>
+                <Tip text="Games this player finished in 1st place.">Wins</Tip>
+              </Th>
+              <Th>
+                <Tip text="Wins divided by games played.">Win rate</Tip>
+              </Th>
+              <Th>
+                <Tip text="Average final victory points across their games.">Avg VP</Tip>
+              </Th>
+              <Th>
+                <Tip text="Average finishing position across their games (lower is better).">Avg rank</Tip>
+              </Th>
             </tr>
           </thead>
           <tbody>

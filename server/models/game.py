@@ -55,6 +55,7 @@ class PlayerGameStats(PlayerBrief):
     victory_points_by_source: Dict[str, int] = Field(default_factory=dict)
     resource_stats: Dict[str, Any] = Field(default_factory=dict)
     activity_stats: Dict[str, Any] = Field(default_factory=dict)
+    dev_cards: Dict[str, int] = Field(default_factory=dict)
 
 
 class GameSummary(BaseModel):

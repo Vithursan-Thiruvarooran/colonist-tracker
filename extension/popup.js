@@ -99,6 +99,8 @@ function statusOf(capture) {
 
 function statusLabel(capture) {
   switch (statusOf(capture)) {
+    case "sending":
+      return "Sending…";
     case "sent":
       return "Sent";
     case "skipped":
@@ -108,12 +110,6 @@ function statusLabel(capture) {
     default:
       return "Not sent yet";
   }
-}
-
-async function patchCapture(gameId, patch) {
-  const { captures } = await chrome.storage.local.get({ captures: [] });
-  const next = captures.map((c) => (c.gameId === gameId ? { ...c, ...patch } : c));
-  await chrome.storage.local.set({ captures: next });
 }
 
 function render(captures) {
@@ -163,7 +159,12 @@ function render(captures) {
 
     const sendBtn = document.createElement("button");
     sendBtn.className = "btn btn--primary";
-    sendBtn.textContent = status === "sent" || status === "skipped" ? "Resend" : "Send to backend";
+    if (status === "sending") {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending…";
+    } else {
+      sendBtn.textContent = status === "sent" || status === "skipped" ? "Resend" : "Send to backend";
+    }
     sendBtn.addEventListener("click", () => sendCapture(capture, sendBtn));
     sendButtons.set(capture.gameId, sendBtn);
 
@@ -205,53 +206,30 @@ function downloadCapture(capture) {
   );
 }
 
+// Delegates the actual send to background.js -- it's the same code path used
+// for the automatic send-on-capture, so status handling (including clearing
+// a stale auth token on 401) only lives in one place.
 async function sendCapture(capture, button) {
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = "Sending…";
 
-  try {
-    const { backendUrl, authToken } = await chrome.storage.local.get({
-      backendUrl: DEFAULT_BACKEND_URL,
-      authToken: null,
-    });
-    const response = await fetch(backendUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      },
-      body: JSON.stringify({ raw: capture.payload }),
-    });
+  const result = await chrome.runtime.sendMessage({ type: "SEND_CAPTURE", gameId: capture.gameId });
 
-    if (response.status === 401) {
-      await chrome.storage.local.set({ authToken: null });
-      refreshAuthStatus();
-      throw new Error("Invalid or missing API token — paste a fresh one below, then try again");
-    }
-
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(detail || `HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-    const status = result.status === "skipped" ? "skipped" : "sent";
-    await patchCapture(capture.gameId, { status, sentAt: Date.now(), lastError: null });
-    button.classList.add("btn--sent");
-    button.textContent = status === "skipped" ? "Already stored" : "Sent";
-  } catch (err) {
-    await patchCapture(capture.gameId, { status: "failed", lastError: String(err) });
+  if (result?.error) {
     button.textContent = "Failed to send";
-    button.title = String(err);
-  } finally {
-    setTimeout(() => {
-      button.disabled = false;
-      button.classList.remove("btn--sent");
-      button.textContent = originalText;
-      button.title = "";
-    }, 2000);
+    button.title = result.error;
+  } else {
+    button.classList.add("btn--sent");
+    button.textContent = result?.status === "skipped" ? "Already stored" : "Sent";
   }
+
+  setTimeout(() => {
+    button.disabled = false;
+    button.classList.remove("btn--sent");
+    button.textContent = originalText;
+    button.title = "";
+  }, 2000);
 }
 
 async function loadCaptures() {
@@ -265,5 +243,9 @@ async function loadCaptures() {
 
 loadCaptures();
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.captures) render(pruneExpired(changes.captures.newValue || []));
+  if (area !== "local") return;
+  if (changes.captures) render(pruneExpired(changes.captures.newValue || []));
+  // Reflects a token cleared by a 401 during an automatic send-on-capture,
+  // which can happen while the popup is open without the user touching it.
+  if (changes.authToken) refreshAuthStatus();
 });

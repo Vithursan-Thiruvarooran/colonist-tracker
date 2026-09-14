@@ -61,7 +61,7 @@ function GameRow({ game }: { game: GameSummary }) {
         </div>
       </div>
 
-      <p className="mt-3 text-xs text-ink-dim/70">
+      <p className="mt-3 text-xs text-ink-dim">
         Ingested {formatDate(game.fetched_at)}
         {game.source_username ? ` · ${game.source_username}` : ""}
       </p>

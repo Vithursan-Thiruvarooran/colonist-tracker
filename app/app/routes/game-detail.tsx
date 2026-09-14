@@ -2,50 +2,104 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import { DiceRollChart } from "../components/charts/DiceRollChart";
-import { DivergingBarChart, type DivergingBarRow } from "../components/charts/DivergingBarChart";
 import { GroupedBarChart } from "../components/charts/GroupedBarChart";
-import { StackedCompositionChart } from "../components/charts/StackedCompositionChart";
 import { Badge } from "../components/ui/Badge";
+import { CompositionTable, type CompositionSource } from "../components/ui/CompositionTable";
 import { Panel, RawPanel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
+import { Tip } from "../components/ui/Tip";
 import { categoricalColor } from "../lib/chartTheme";
 import { getGame, type GameDetail as GameDetailType } from "../services/games";
 
-const VP_SOURCES: { key: string; label: string }[] = [
-  { key: "settlements", label: "Settlements" },
-  { key: "cities", label: "Cities" },
-  { key: "victory_point_cards", label: "VP Cards" },
-  { key: "largest_army", label: "Largest Army" },
-  { key: "longest_road", label: "Longest Road" },
+const VP_SOURCES: CompositionSource[] = [
+  { key: "settlements", label: "Settlements", tip: "1 point each, while it remains a settlement." },
+  { key: "cities", label: "Cities", tip: "2 points each -- an upgraded settlement." },
+  {
+    key: "victory_point_cards",
+    label: "VP Cards",
+    tip: "Victory Point development cards, revealed at game end.",
+  },
+  {
+    key: "largest_army",
+    label: "Largest Army",
+    tip: "2 points for holding the most played Knight cards (minimum 3).",
+  },
+  {
+    key: "longest_road",
+    label: "Longest Road",
+    tip: "2 points for the longest continuous road (minimum 5 segments).",
+  },
 ];
 
-const RESOURCE_INCOME_SOURCES: { key: string; label: string }[] = [
-  { key: "rollingIncome", label: "From rolls" },
-  { key: "robbingIncome", label: "From robbing" },
-  { key: "tradeIncome", label: "From trades" },
-  { key: "devCardIncome", label: "From dev cards" },
+const RESOURCE_INCOME_SOURCES: CompositionSource[] = [
+  { key: "rollingIncome", label: "From rolls", tip: "Resources produced by dice rolls." },
+  {
+    key: "robbingIncome",
+    label: "From robbing",
+    tip: "Resources taken from other players via the robber or a played Knight.",
+  },
+  {
+    key: "tradeIncome",
+    label: "From trades",
+    tip: "Resources gained from trades with other players or the bank/ports.",
+  },
+  {
+    key: "devCardIncome",
+    label: "From dev cards",
+    tip: "Resources gained by playing Year of Plenty or Monopoly.",
+  },
 ];
 
-const RESOURCE_STATS: { key: string; label: string }[] = [
-  { key: "totalResourceIncome", label: "Resource income" },
-  { key: "totalResourceLoss", label: "Resource loss" },
-  { key: "rollingIncome", label: "From rolls" },
-  { key: "robbingIncome", label: "From robbing" },
-  { key: "tradeIncome", label: "From trades" },
-  { key: "devCardIncome", label: "From dev cards" },
+const RESOURCE_STATS: CompositionSource[] = [
+  {
+    key: "totalResourceIncome",
+    label: "Resource income",
+    tip: "Every resource gained this game, from all sources combined.",
+  },
+  {
+    key: "totalResourceLoss",
+    label: "Resource loss",
+    tip: "Every resource lost this game -- to the robber, discards, and trades given away.",
+  },
+  ...RESOURCE_INCOME_SOURCES,
 ];
 
-const ACTIVITY_STATS: { key: string; label: string }[] = [
-  { key: "proposedTrades", label: "Trades proposed" },
-  { key: "successfulTrades", label: "Trades completed" },
-  { key: "devCardsBought", label: "Dev cards bought" },
-  { key: "devCardsUsed", label: "Dev cards used" },
+const ACTIVITY_STATS: CompositionSource[] = [
+  {
+    key: "proposedTrades",
+    label: "Trades proposed",
+    tip: "Trade offers this player put on the table, whether or not anyone accepted.",
+  },
+  {
+    key: "successfulTrades",
+    label: "Trades completed",
+    tip: "Trade offers that were accepted and completed.",
+  },
+  { key: "devCardsBought", label: "Dev cards bought", tip: "Development cards purchased from the bank." },
+  {
+    key: "devCardsUsed",
+    label: "Dev cards used",
+    tip: "Development cards played (Knight, Monopoly, Road Building, or Year of Plenty).",
+  },
 ];
 
-function formatCount(value: number): string {
-  return value >= 0 ? `+${value}` : String(value);
-}
+const DEV_CARD_SOURCES: CompositionSource[] = [
+  { key: "knight", label: "Knight", tip: "Knight cards played this game." },
+  { key: "monopoly", label: "Monopoly", tip: "Monopoly cards played this game." },
+  { key: "road_building", label: "Road Building", tip: "Road Building cards played this game." },
+  { key: "year_of_plenty", label: "Year of Plenty", tip: "Year of Plenty cards played this game." },
+  {
+    key: "victory_point",
+    label: "Victory Point",
+    tip: "Victory Point cards -- never played, counted from each player's final score.",
+  },
+  {
+    key: "unknown",
+    label: "Unplayed",
+    tip: "Bought cards whose type never surfaced -- unplayed, and not a Victory Point card.",
+  },
+];
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -86,21 +140,24 @@ export default function GameDetail() {
 
   const playersByRank = [...game.players].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
 
-  const vpChartData = playersByRank.map((p) => {
-    const row: Record<string, string | number> = { name: p.name };
-    for (const source of VP_SOURCES) row[source.key] = p.victory_points_by_source[source.key] ?? 0;
-    return row;
-  });
-
-  const resourceIncomeData = playersByRank.map((p) => {
-    const row: Record<string, string | number> = { name: p.name };
-    for (const source of RESOURCE_INCOME_SOURCES) row[source.key] = p.resource_stats[source.key] ?? 0;
-    return row;
-  });
-
-  const netResourceRows: DivergingBarRow[] = playersByRank.map((p) => ({
+  const vpRows = playersByRank.map((p) => ({
+    key: String(p.color),
     name: p.name,
-    value: (p.resource_stats.totalResourceIncome ?? 0) - (p.resource_stats.totalResourceLoss ?? 0),
+    values: p.victory_points_by_source,
+    total: p.final_victory_points ?? undefined,
+  }));
+
+  const resourceIncomeRows = playersByRank.map((p) => ({
+    key: String(p.color),
+    name: p.name,
+    values: p.resource_stats,
+    total: p.resource_stats.totalResourceIncome ?? undefined,
+  }));
+
+  const devCardRows = playersByRank.map((p) => ({
+    key: String(p.color),
+    name: p.name,
+    values: p.dev_cards,
   }));
 
   const tradesData = playersByRank.map((p) => ({
@@ -132,7 +189,7 @@ export default function GameDetail() {
 
       <SectionHeader title="Victory points by source" caption="Where each player's final score came from." />
       <Panel className="mb-6">
-        <StackedCompositionChart data={vpChartData} sources={VP_SOURCES} />
+        <CompositionTable rows={vpRows} sources={VP_SOURCES} />
       </Panel>
 
       <SectionHeader
@@ -143,20 +200,10 @@ export default function GameDetail() {
         <DiceRollChart distribution={game.dice_roll_distribution} />
       </Panel>
 
-      <SectionHeader
-        title="Resource economy"
-        caption="Where resources came from, and who ended up ahead once losses (robbed, discarded, spent) are netted out."
-      />
-      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel>
-          <h3 className="mb-3 text-sm font-medium text-ink-dim">Income by source</h3>
-          <StackedCompositionChart data={resourceIncomeData} sources={RESOURCE_INCOME_SOURCES} height={240} />
-        </Panel>
-        <Panel>
-          <h3 className="mb-3 text-sm font-medium text-ink-dim">Net resources (income − loss)</h3>
-          <DivergingBarChart data={netResourceRows} formatValue={formatCount} height={240} />
-        </Panel>
-      </div>
+      <SectionHeader title="Resource economy" caption="Where each player's resources came from." />
+      <Panel className="mb-6">
+        <CompositionTable rows={resourceIncomeRows} sources={RESOURCE_INCOME_SOURCES} totalLabel="Total income" />
+      </Panel>
 
       <SectionHeader title="Trades & development cards" caption="Volume alongside follow-through, not just totals." />
       <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -184,19 +231,31 @@ export default function GameDetail() {
         </Panel>
       </div>
 
+      <SectionHeader
+        title="Development cards by type"
+        caption="A card's type is only known once played, or if it's an unplayed Victory Point card revealed at game end -- Unplayed is bought cards whose type never surfaced."
+      />
+      <Panel className="mb-6">
+        <CompositionTable rows={devCardRows} sources={DEV_CARD_SOURCES} totalLabel="Total bought" />
+      </Panel>
+
       <SectionHeader title="Player stats" caption="Every metric above, in full precision." />
       <Panel className="mb-6">
         <Table>
           <thead>
             <tr>
               <Th sticky>Player</Th>
-              <Th>Rank</Th>
-              <Th>VP</Th>
+              <Th>
+                <Tip text="Finishing position in this game (1st, 2nd, ...).">Rank</Tip>
+              </Th>
+              <Th>
+                <Tip text="Final victory point total.">VP</Tip>
+              </Th>
               {RESOURCE_STATS.map((s) => (
-                <Th key={s.key}>{s.label}</Th>
+                <Th key={s.key}>{s.tip ? <Tip text={s.tip}>{s.label}</Tip> : s.label}</Th>
               ))}
               {ACTIVITY_STATS.map((s) => (
-                <Th key={s.key}>{s.label}</Th>
+                <Th key={s.key}>{s.tip ? <Tip text={s.tip}>{s.label}</Tip> : s.label}</Th>
               ))}
             </tr>
           </thead>

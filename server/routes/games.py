@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -43,9 +43,12 @@ async def get_games(
     limit: int = Query(default=20, gt=0, le=100),
     skip: int = Query(default=0, ge=0),
     player: Optional[str] = Query(default=None, description="Filter to games this player (user_id or name) played in"),
+    sort_by: Literal["played_at", "fetched_at"] = Query(
+        default="played_at", description="fetched_at surfaces ingestion order rather than game chronology"
+    ),
     db=Depends(get_db),
 ):
-    return await list_games(db, limit, skip, player)
+    return await list_games(db, limit, skip, player, sort_by)
 
 
 @router.get("/{game_id}", response_model=GameDetail)

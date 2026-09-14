@@ -34,6 +34,7 @@ export interface PlayerGameStats extends PlayerBrief {
   victory_points_by_source: Record<string, number>;
   resource_stats: Record<string, number>;
   activity_stats: Record<string, number>;
+  dev_cards: Record<string, number>;
 }
 
 export interface GameSummary {
@@ -87,11 +88,14 @@ export interface StatsOverview {
   dice_roll_distribution: Record<string, number>;
 }
 
-export function listGames(params: { limit?: number; skip?: number; player?: string } = {}): Promise<GameSummary[]> {
+export function listGames(
+  params: { limit?: number; skip?: number; player?: string; sortBy?: "played_at" | "fetched_at" } = {}
+): Promise<GameSummary[]> {
   const query = new URLSearchParams();
   if (params.limit) query.set("limit", String(params.limit));
   if (params.skip) query.set("skip", String(params.skip));
   if (params.player) query.set("player", params.player);
+  if (params.sortBy) query.set("sort_by", params.sortBy);
   const qs = query.toString();
   return apiFetch<GameSummary[]>(`/api/games${qs ? `?${qs}` : ""}`);
 }

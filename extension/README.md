@@ -18,11 +18,17 @@ normally and capture as you go.
   avoids both).
 - `content.js` relays captures from the page context to `background.js`.
 - `background.js` stores captures (by game ID, most recent 25) in
-  `chrome.storage.local` and badges the toolbar icon.
+  `chrome.storage.local`, badges the toolbar icon, and immediately attempts to
+  send each freshly captured game to the backend (`POST`s
+  `{"raw": <payload>}` to the configured backend URL — `server`'s
+  `POST /api/games/ingest` endpoint accepts this shape directly) — no popup
+  interaction needed for the common case.
 - The popup lists captures with two actions per game: **Download JSON** (saves
   a `colonist-game-<id>.json` file via `chrome.downloads`) and **Send to
-  backend** (`POST`s `{"raw": <payload>}` to the configured backend URL —
-  `server`'s `POST /api/games/ingest` endpoint accepts this shape directly).
+  backend** (falls back to "Resend"/manual retry — the same send logic
+  `background.js` uses for the automatic attempt, triggered via a
+  `SEND_CAPTURE` message so status handling, including clearing a stale auth
+  token on 401, only lives in one place).
 
 ## Expiry
 
@@ -34,12 +40,17 @@ statement about how long colonist.io itself keeps replays available.
 
 ## Send status
 
-Each capture persists a send status (`unsent` / `sent` / `already stored` /
-`failed to send`, with the error on hover) in `chrome.storage.local`, shown as
-a label under its timestamp — so it survives closing and reopening the popup,
-not just the transient button text during a send. The toolbar badge also
-reflects it: it turns red with a failure count whenever any capture has
-failed to send, otherwise it shows the green total-captures count as before.
+Each capture persists a send status (`unsent` / `sending` / `sent` /
+`already stored` / `failed to send`, with the error on hover) in
+`chrome.storage.local`, shown as a label under its timestamp — so it survives
+closing and reopening the popup, not just the transient button text during a
+send. Since sending is automatic, a game usually flips straight from
+`sending` to `sent`/`already stored` before you even open the popup; **Send
+to backend**/**Resend** exist for when the automatic attempt fails (e.g. the
+backend was offline, or the token had expired) or you want to manually
+re-ingest something. The toolbar badge reflects status too: it turns red with
+a failure count whenever any capture has failed to send, otherwise it shows
+the green total-captures count as before.
 
 **Resend unsent/failed** appears above the list whenever there's at least one
 capture that hasn't been successfully sent yet, and only retries those —
@@ -70,7 +81,7 @@ origins they hold host permission for.
 login, it uses the single shared ingest API token an admin generates on the
 dashboard's `/admin` page (`GET`/`POST /api/admin/ingest-token*`, admin-only).
 Paste that token into the popup's **API token** field and click **Save** — it's
-stored in `chrome.storage.local` and attached to every **Send to
-backend**/**Send all** request automatically. A 401 (e.g. after an admin
-regenerates the token) clears the stored token and the status line prompts you
-to paste a fresh one.
+stored in `chrome.storage.local` and attached to every send, automatic or
+manual. A 401 (e.g. after an admin regenerates the token) clears the stored
+token and the status line prompts you to paste a fresh one — captures that
+failed for this reason sit as "Failed to send" until you do.
