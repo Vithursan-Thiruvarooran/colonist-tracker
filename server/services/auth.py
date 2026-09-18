@@ -86,9 +86,11 @@ async def _resolve_user(db, authorization: Optional[str]) -> Optional[Dict[str, 
 
 async def get_current_user(authorization: Optional[str] = Header(default=None), db=Depends(get_db)) -> Dict[str, Any]:
     """FastAPI dependency for the per-person account system -- resolves the
-    bearer token to its `users` document."""
+    bearer token to its `users` document. Re-checks `status` on every call
+    (not just at login) so admin-rejecting a previously-approved account
+    revokes access immediately instead of waiting out the token's 7-day TTL."""
     user = await _resolve_user(db, authorization)
-    if user is None:
+    if user is None or user.get("status") != "approved":
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return user
 

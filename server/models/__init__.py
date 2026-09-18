@@ -1,6 +1,4 @@
 from server.models.game import (
-    FetchGamesRequest,
-    FetchGamesResponse,
     FetchResult,
     GameDetail,
     GameSummary,
@@ -24,8 +22,6 @@ from server.models.user import (
 
 __all__ = [
     "AdminUserRow",
-    "FetchGamesRequest",
-    "FetchGamesResponse",
     "FetchResult",
     "GameDetail",
     "GameSummary",

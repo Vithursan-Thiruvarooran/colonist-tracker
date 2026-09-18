@@ -2,11 +2,10 @@
 
 Watches colonist.io's own network calls for `/api/replay/data-from-game-id` and
 captures the response — no JWT needed, since it rides along with whatever
-session the browser is already logged into. This is an alternative to
-`server/extractor/fetch_game.py`'s JWT-based fetch, for when that endpoint is
-blocking automated requests (see the rate-limit note in
-`server/services/game_ingest.py`) or you'd rather just play/browse replays
-normally and capture as you go.
+session the browser is already logged into. This is the primary way to get
+a game's replay data into the backend (there's no automated JWT-based fetch
+in this project) — just play/browse replays normally and capture as you go,
+or paste a captured payload manually via the dashboard's `/ingest` page.
 
 ## How it works
 

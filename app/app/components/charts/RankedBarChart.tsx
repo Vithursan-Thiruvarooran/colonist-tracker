@@ -1,6 +1,7 @@
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Tooltip, XAxis, YAxis } from "recharts";
 
 import { CHART_INK } from "../../lib/chartTheme";
+import { ChartFrame } from "./ChartFrame";
 import { tooltipContentStyle, tooltipLabelStyle } from "./tooltipStyle";
 
 export interface RankedBarRow {
@@ -31,44 +32,36 @@ export function RankedBarChart({
   // when the roster is long -- a fixed height is only safe for a fixed N.
   const resolvedHeight = height ?? Math.max(140, data.length * 32 + 32);
   return (
-    <div style={{ height: resolvedHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
-          <CartesianGrid strokeDasharray="none" stroke={CHART_INK.grid} horizontal={false} />
-          <XAxis
-            type="number"
-            domain={domain}
-            unit={unit}
-            stroke={CHART_INK.axis}
-            tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
+    <ChartFrame height={resolvedHeight}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
+        <CartesianGrid strokeDasharray="none" stroke={CHART_INK.grid} horizontal={false} />
+        <XAxis
+          type="number"
+          domain={domain}
+          unit={unit}
+          stroke={CHART_INK.axis}
+          tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
+        />
+        <YAxis type="category" dataKey="name" width={96} stroke={CHART_INK.axis} tick={{ fill: CHART_INK.secondary, fontSize: 12 }} />
+        <Tooltip
+          cursor={{ fill: CHART_INK.grid, opacity: 0.4 }}
+          contentStyle={tooltipContentStyle}
+          labelStyle={tooltipLabelStyle}
+          formatter={(value?: unknown) => [formatValue(Number(value ?? 0)), "Value"]}
+        />
+        <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
+          {data.map((row) => (
+            <Cell key={row.name} fill={row.color} />
+          ))}
+          <LabelList
+            dataKey="value"
+            position="right"
+            formatter={(value: unknown) => formatValue(Number(value))}
+            fill={CHART_INK.secondary}
+            fontSize={12}
           />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={96}
-            stroke={CHART_INK.axis}
-            tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-          />
-          <Tooltip
-            cursor={{ fill: CHART_INK.grid, opacity: 0.4 }}
-            contentStyle={tooltipContentStyle}
-            labelStyle={tooltipLabelStyle}
-            formatter={(value?: unknown) => [formatValue(Number(value ?? 0)), "Value"]}
-          />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={22} isAnimationActive={false}>
-            {data.map((row) => (
-              <Cell key={row.name} fill={row.color} />
-            ))}
-            <LabelList
-              dataKey="value"
-              position="right"
-              formatter={(value: unknown) => formatValue(Number(value))}
-              fill={CHART_INK.secondary}
-              fontSize={12}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+        </Bar>
+      </BarChart>
+    </ChartFrame>
   );
 }

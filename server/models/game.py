@@ -4,15 +4,10 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
-class FetchGamesRequest(BaseModel):
-    count: int = Field(gt=0, le=100, description="How many of the most recent finished games to fetch")
-    username: Optional[str] = Field(default=None, description="Overrides COLONIST_USERNAME for this request")
-
-
 class IngestGameRequest(BaseModel):
     raw: Dict[str, Any] = Field(
-        description="Raw colonist.io replay payload, pasted manually -- either the "
-        "unwrapped 'data' object (what fetch_game.py returns) or the full API "
+        description="Raw colonist.io replay payload, pasted manually or captured by the "
+        "Chrome extension -- either the unwrapped 'data' object or the full API "
         "response ({'data': {...}})"
     )
 
@@ -21,13 +16,6 @@ class FetchResult(BaseModel):
     game_id: str
     status: Literal["stored", "skipped"]
     reason: Optional[str] = None
-
-
-class FetchGamesResponse(BaseModel):
-    requested_count: int
-    stored_count: int
-    skipped_count: int
-    results: List[FetchResult]
 
 
 class WinnerInfo(BaseModel):
@@ -47,6 +35,9 @@ class PlayerBrief(BaseModel):
     is_winner: bool
     rank: Optional[int] = None
     final_victory_points: Optional[int] = None
+    starting_placement_pips: Optional[int] = None
+    starting_placement_resource_diversity: Optional[int] = None
+    starting_placement_resources: Dict[str, int] = Field(default_factory=dict)
 
 
 class PlayerGameStats(PlayerBrief):
@@ -77,6 +68,105 @@ class LogEntry(BaseModel):
     text: str
 
 
+class BoardHex(BaseModel):
+    index: int
+    terrain: str
+    dice_number: Optional[int] = None
+    x: int
+    y: int
+    pips: int = 0
+
+
+class BoardPort(BaseModel):
+    index: int
+    port_type: str
+    x: int
+    y: int
+    z: int
+
+
+class BoardCorner(BaseModel):
+    """A settlement/city spot. x/y/z are colonist.io's raw coordinates,
+    passed through as opaque values for pixel placement (a frontend-only
+    concern, see boardGeometry.ts) -- but hex_indices resolves real hex
+    adjacency server-side, since cross-game analytics need it, not just a
+    pixel position."""
+
+    index: int
+    x: int
+    y: int
+    z: int
+    building_type: Optional[str] = None
+    owner: Optional[str] = None
+    hex_indices: List[int] = Field(default_factory=list)
+
+
+class BoardEdge(BaseModel):
+    """A road spot; x/y/z are opaque raw coordinates, same caveat as BoardCorner."""
+
+    index: int
+    x: int
+    y: int
+    z: int
+    owner: Optional[str] = None
+
+
+class Board(BaseModel):
+    hexes: List[BoardHex] = Field(default_factory=list)
+    ports: List[BoardPort] = Field(default_factory=list)
+    corners: List[BoardCorner] = Field(default_factory=list)
+    edges: List[BoardEdge] = Field(default_factory=list)
+    robber_tile_index: Optional[int] = None
+
+
+class TimelineStepLogEntry(BaseModel):
+    index: int
+    type: Optional[int] = None
+    player: Optional[str] = None
+    text: str
+
+
+class TimelineCornerDelta(BaseModel):
+    """Only the fields that changed on this corner at this step -- static
+    position (x/y/z) lives once, on the matching corner in
+    GameTimeline.initial_board, not repeated per step."""
+
+    index: int
+    building_type: Optional[str] = None
+    owner: Optional[str] = None
+
+
+class TimelineEdgeDelta(BaseModel):
+    index: int
+    owner: Optional[str] = None
+
+
+class TimelineStep(BaseModel):
+    """One raw eventHistory event, decoded. `robber_tile_index` is set only
+    on the step the robber actually moved -- absent (None) otherwise, same
+    partial-delta idea as the corner/edge deltas."""
+
+    step_index: int
+    log_entries: List[TimelineStepLogEntry] = Field(default_factory=list)
+    corner_deltas: List[TimelineCornerDelta] = Field(default_factory=list)
+    edge_deltas: List[TimelineEdgeDelta] = Field(default_factory=list)
+    robber_tile_index: Optional[int] = None
+
+
+class GameTimeline(BaseModel):
+    """The full per-event playback timeline for one game -- lives in its own
+    `game_timelines` collection, not on the `games` document (see
+    server/services/timeline_documents.py's docstring for why). A frontend
+    reducer folds `steps[0..k]` onto `initial_board` to get the board at
+    step k."""
+
+    game_id: str
+    built_at: datetime
+    player_colors: Dict[int, str] = Field(default_factory=dict)
+    initial_board: Board
+    steps: List[TimelineStep] = Field(default_factory=list)
+
+
 class GameDetail(BaseModel):
     game_id: str
     played_at: Optional[datetime] = None
@@ -88,6 +178,14 @@ class GameDetail(BaseModel):
     winner: Optional[WinnerInfo] = None
     dice_roll_distribution: Dict[str, int] = Field(default_factory=dict)
     players: List[PlayerGameStats] = Field(default_factory=list)
+    board: Optional[Board] = None
+    # {actor_name: {other_player_name: count}} -- robbery_matrix is
+    # directional (thief -> victim); trade_matrix is directional too
+    # (proposer -> accepter), so a symmetric "trades between A and B" reads
+    # as the sum of both directions, not one cell.
+    robbery_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+    trade_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+    rejected_trade_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     log: List[LogEntry] = Field(default_factory=list)
 
 
@@ -107,3 +205,30 @@ class StatsOverview(BaseModel):
     avg_duration_ms: Optional[float] = None
     avg_total_turns: Optional[float] = None
     dice_roll_distribution: Dict[str, int] = Field(default_factory=dict)
+
+
+class PlayerGameRow(BaseModel):
+    """One row per (game, player) observation -- the flat shape cross-game
+    correlation queries need (e.g. dev cards used vs. robbing income), as
+    opposed to PlayerAggregateStats' one-row-per-player rollup. Fields come
+    straight off the existing `games` collection; nothing here requires a
+    decode-time schema change."""
+
+    game_id: str
+    played_at: Optional[datetime] = None
+    name: str
+    user_id: Optional[str] = None
+    rank: Optional[int] = None
+    final_victory_points: Optional[int] = None
+    is_winner: bool
+    starting_placement_pips: Optional[int] = None
+    starting_placement_resource_diversity: Optional[int] = None
+    total_resource_income: Optional[int] = None
+    robbing_income: Optional[int] = None
+    trade_income: Optional[int] = None
+    dev_card_income: Optional[int] = None
+    proposed_trades: Optional[int] = None
+    successful_trades: Optional[int] = None
+    dev_cards_bought: Optional[int] = None
+    dev_cards_used: Optional[int] = None
+    knight_cards_played: Optional[int] = None

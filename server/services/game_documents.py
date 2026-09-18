@@ -30,18 +30,27 @@ def _dice_distribution_by_roll(distribution: Optional[list]) -> dict:
 def build_game_document(raw: dict, source_username: str, player_color: Optional[int], fetched_at: datetime) -> dict:
     decoded = decode(raw)
 
-    resource_stats_by_name = decoded.get("resource_stats_by_player", {})
-    activity_stats_by_name = decoded.get("activity_stats_by_player", {})
-    dev_cards_by_name = decoded.get("dev_cards_by_player", {})
+    # Each of decode()'s per-player breakdowns is keyed by player name and
+    # nests onto the player dict under the same field name -- a new
+    # breakdown only needs a new entry here, not a new merge line.
+    per_player_stats = {
+        "resource_stats": decoded.get("resource_stats_by_player", {}),
+        "activity_stats": decoded.get("activity_stats_by_player", {}),
+        "dev_cards": decoded.get("dev_cards_by_player", {}),
+    }
+    # starting_placements is flattened directly onto the player (multiple
+    # top-level fields, e.g. starting_placement_pips), not nested under one
+    # key, so it's merged separately from per_player_stats above.
+    starting_placements_by_name = decoded.get("starting_placements", {})
 
     players = []
     winner = None
     for player in decoded.get("players", []):
         name = player["name"]
         merged_player = dict(player)
-        merged_player["resource_stats"] = resource_stats_by_name.get(name, {})
-        merged_player["activity_stats"] = activity_stats_by_name.get(name, {})
-        merged_player["dev_cards"] = dev_cards_by_name.get(name, {})
+        for field, stats_by_name in per_player_stats.items():
+            merged_player[field] = stats_by_name.get(name, {})
+        merged_player.update(starting_placements_by_name.get(name, {}))
         players.append(merged_player)
         if player.get("is_winner"):
             winner = {"user_id": player.get("user_id"), "name": name, "color": player.get("color")}
@@ -62,6 +71,10 @@ def build_game_document(raw: dict, source_username: str, player_color: Optional[
         "winner": winner,
         "dice_roll_distribution": _dice_distribution_by_roll(decoded.get("dice_roll_distribution")),
         "players": players,
+        "board": decoded.get("board"),
+        "robbery_matrix": decoded.get("robbery_matrix", {}),
+        "trade_matrix": decoded.get("trade_matrix", {}),
+        "rejected_trade_matrix": decoded.get("rejected_trade_matrix", {}),
         "log": [
             {"index": entry["index"], "type": entry["type"], "player": entry["player"], "text": entry["text"]}
             for entry in decoded.get("log", [])

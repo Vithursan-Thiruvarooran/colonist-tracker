@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 
+import { CatanBoard } from "../components/board/CatanBoard";
 import { DiceRollChart } from "../components/charts/DiceRollChart";
 import { GroupedBarChart } from "../components/charts/GroupedBarChart";
 import { Badge } from "../components/ui/Badge";
 import { CompositionTable, type CompositionSource } from "../components/ui/CompositionTable";
+import { EventLogList } from "../components/ui/EventLogList";
+import { MatrixTable } from "../components/ui/MatrixTable";
 import { Panel, RawPanel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
@@ -139,6 +142,7 @@ export default function GameDetail() {
   }
 
   const playersByRank = [...game.players].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  const playerNames = playersByRank.map((p) => p.name);
 
   const vpRows = playersByRank.map((p) => ({
     key: String(p.color),
@@ -187,6 +191,23 @@ export default function GameDetail() {
         {game.winner && <Badge tone="winner">Winner: {game.winner.name}</Badge>}
       </div>
 
+      {game.board && game.board.hexes.length > 0 && (
+        <>
+          <SectionHeader
+            title="Board"
+            caption="Terrain, dice numbers, the robber, and every settlement, city, and road, reconstructed from the raw game data."
+          />
+          <Panel className="mb-6">
+            <CatanBoard board={game.board} players={game.players.map((p) => p.name)} />
+            <div className="mt-3 text-center">
+              <Link to={`/games/${game.game_id}/replay`} className="text-sm text-brick hover:underline">
+                Watch replay →
+              </Link>
+            </div>
+          </Panel>
+        </>
+      )}
+
       <SectionHeader title="Victory points by source" caption="Where each player's final score came from." />
       <Panel className="mb-6">
         <CompositionTable rows={vpRows} sources={VP_SOURCES} />
@@ -227,6 +248,45 @@ export default function GameDetail() {
               { key: "devCardsUsed", label: "Used", color: categoricalColor(1) },
             ]}
             height={220}
+          />
+        </Panel>
+      </div>
+
+      <SectionHeader
+        title="Player interactions"
+        caption="Read a row across: how many times that player robbed, traded with, or was turned down by each column."
+      />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Robbing</h3>
+          <MatrixTable
+            players={playerNames}
+            matrix={game.robbery_matrix}
+            cellTip={(row, col, value) => `${row} robbed ${col} ${value} time${value === 1 ? "" : "s"}`}
+          />
+        </Panel>
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Trading</h3>
+          <MatrixTable
+            players={playerNames}
+            matrix={game.trade_matrix}
+            cellTip={(row, col, value) =>
+              `${row} traded with ${col} ${value} time${value === 1 ? "" : "s"} (${row} proposed, ${col} accepted)`
+            }
+          />
+        </Panel>
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Rejected trades</h3>
+          <p className="mb-3 text-xs text-ink-dim">
+            Every time a player's open trade offer was explicitly turned down, whether or not it was ever accepted
+            by someone else.
+          </p>
+          <MatrixTable
+            players={playerNames}
+            matrix={game.rejected_trade_matrix}
+            cellTip={(row, col, value) =>
+              `${col} rejected ${row}'s trade offer ${value} time${value === 1 ? "" : "s"}`
+            }
           />
         </Panel>
       </div>
@@ -282,11 +342,7 @@ export default function GameDetail() {
           Event log ({game.log.length} entries)
         </summary>
         <RawPanel className="mt-2">
-          <ul className="max-h-96 space-y-0.5 overflow-y-auto font-mono text-xs">
-            {game.log.map((entry) => (
-              <li key={entry.index}>{entry.text}</li>
-            ))}
-          </ul>
+          <EventLogList entries={game.log} />
         </RawPanel>
       </details>
     </div>

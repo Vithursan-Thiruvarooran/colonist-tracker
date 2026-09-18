@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from server.models.game import GameDetail, GameSummary, PlayerAggregateStats, StatsOverview
+from server.models.game import GameDetail, GameSummary, GameTimeline, PlayerAggregateStats, PlayerGameRow, StatsOverview
 
 # Fields dropped from the list view -- kept in the single-game detail view --
 # to keep a page of games cheap to fetch.
@@ -45,6 +45,13 @@ async def get_game(db: AsyncIOMotorDatabase, game_id: str) -> Optional[GameDetai
     if doc is None:
         return None
     return GameDetail(**doc)
+
+
+async def get_timeline(db: AsyncIOMotorDatabase, game_id: str) -> Optional[GameTimeline]:
+    doc = await db.game_timelines.find_one({"game_id": game_id}, {"_id": 0})
+    if doc is None:
+        return None
+    return GameTimeline(**doc)
 
 
 async def get_player_stats(db: AsyncIOMotorDatabase) -> List[PlayerAggregateStats]:
@@ -86,6 +93,39 @@ async def get_player_stats(db: AsyncIOMotorDatabase) -> List[PlayerAggregateStat
             )
         )
     return results
+
+
+async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
+    """One row per (game, player) -- deliberately no $group, so correlation
+    plots (pips vs. final VP, dev cards used vs. robbing income, ...) get a
+    real per-observation scatter rather than a pre-aggregated rollup."""
+    pipeline = [
+        {"$unwind": "$players"},
+        {
+            "$project": {
+                "_id": 0,
+                "game_id": 1,
+                "played_at": 1,
+                "name": "$players.name",
+                "user_id": "$players.user_id",
+                "rank": "$players.rank",
+                "final_victory_points": "$players.final_victory_points",
+                "is_winner": "$players.is_winner",
+                "starting_placement_pips": "$players.starting_placement_pips",
+                "starting_placement_resource_diversity": "$players.starting_placement_resource_diversity",
+                "total_resource_income": "$players.resource_stats.totalResourceIncome",
+                "robbing_income": "$players.resource_stats.robbingIncome",
+                "trade_income": "$players.resource_stats.tradeIncome",
+                "dev_card_income": "$players.resource_stats.devCardIncome",
+                "proposed_trades": "$players.activity_stats.proposedTrades",
+                "successful_trades": "$players.activity_stats.successfulTrades",
+                "dev_cards_bought": "$players.activity_stats.devCardsBought",
+                "dev_cards_used": "$players.activity_stats.devCardsUsed",
+                "knight_cards_played": "$players.dev_cards.knight",
+            }
+        },
+    ]
+    return [PlayerGameRow(**row) async for row in db.games.aggregate(pipeline)]
 
 
 async def get_stats_overview(db: AsyncIOMotorDatabase) -> StatsOverview:

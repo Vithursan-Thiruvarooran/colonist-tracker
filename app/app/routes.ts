@@ -5,6 +5,7 @@ export default [
     index("routes/stats.tsx"),
     route("games", "routes/home.tsx"),
     route("games/:gameId", "routes/game-detail.tsx"),
+    route("games/:gameId/replay", "routes/game-replay.tsx"),
     route("ingest", "routes/ingest.tsx"),
     route("login", "routes/auth.tsx"),
     route("signup", "routes/auth.tsx", { id: "routes/auth-signup" }),

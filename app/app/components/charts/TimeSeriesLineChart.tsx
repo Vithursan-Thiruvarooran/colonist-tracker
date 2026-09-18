@@ -1,6 +1,7 @@
-import { Area, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, CartesianGrid, ComposedChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { CHART_INK, SEQUENTIAL_HUE } from "../../lib/chartTheme";
+import { ChartFrame } from "./ChartFrame";
 import { tooltipContentStyle, tooltipLabelStyle } from "./tooltipStyle";
 
 export interface TimeSeriesPoint {
@@ -22,41 +23,34 @@ export function TimeSeriesLineChart({
   height?: number;
 }) {
   return (
-    <div style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-          <CartesianGrid strokeDasharray="none" stroke={CHART_INK.grid} vertical={false} />
-          <XAxis
-            dataKey="label"
-            stroke={CHART_INK.axis}
-            tick={{ fill: CHART_INK.secondary, fontSize: 11 }}
-            interval="preserveStartEnd"
-            minTickGap={24}
-          />
-          <YAxis
-            stroke={CHART_INK.axis}
-            tick={{ fill: CHART_INK.secondary, fontSize: 12 }}
-            width={40}
-            domain={[0, "auto"]}
-          />
-          <Tooltip
-            contentStyle={tooltipContentStyle}
-            labelStyle={tooltipLabelStyle}
-            formatter={(value?: unknown) => [formatValue(Number(value ?? 0)), "Value"]}
-            cursor={{ stroke: CHART_INK.axis, strokeWidth: 1 }}
-          />
-          <Area
-            dataKey="value"
-            stroke={SEQUENTIAL_HUE}
-            strokeWidth={2}
-            fill={SEQUENTIAL_HUE}
-            fillOpacity={0.1}
-            dot={false}
-            activeDot={{ r: 4, fill: SEQUENTIAL_HUE, stroke: CHART_INK.tooltipBg, strokeWidth: 2 }}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-    </div>
+    <ChartFrame height={height}>
+      <ComposedChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+        <CartesianGrid strokeDasharray="none" stroke={CHART_INK.grid} vertical={false} />
+        <XAxis
+          dataKey="label"
+          stroke={CHART_INK.axis}
+          tick={{ fill: CHART_INK.secondary, fontSize: 11 }}
+          interval="preserveStartEnd"
+          minTickGap={24}
+        />
+        <YAxis stroke={CHART_INK.axis} tick={{ fill: CHART_INK.secondary, fontSize: 12 }} width={40} domain={[0, "auto"]} />
+        <Tooltip
+          contentStyle={tooltipContentStyle}
+          labelStyle={tooltipLabelStyle}
+          formatter={(value?: unknown) => [formatValue(Number(value ?? 0)), "Value"]}
+          cursor={{ stroke: CHART_INK.axis, strokeWidth: 1 }}
+        />
+        <Area
+          dataKey="value"
+          stroke={SEQUENTIAL_HUE}
+          strokeWidth={2}
+          fill={SEQUENTIAL_HUE}
+          fillOpacity={0.1}
+          dot={false}
+          activeDot={{ r: 4, fill: SEQUENTIAL_HUE, stroke: CHART_INK.tooltipBg, strokeWidth: 2 }}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+    </ChartFrame>
   );
 }

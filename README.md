@@ -2,36 +2,33 @@
 
 Extracts structured game data (players, dice rolls, trades, builds, robber
 moves, resource gains, final scores, winner, etc.) from a finished
-[colonist.io](https://colonist.io) Catan game, for later storage/analysis
-(see `CLAUDE.md` for the overall project phases).
+[colonist.io](https://colonist.io) Catan game, stores it in MongoDB, and
+serves it through a FastAPI backend + React dashboard (with a Chrome
+extension as an alternative ingest path) — see `CLAUDE.md` for the full
+architecture, which is kept more current than this file.
 
 Game data comes from colonist.io's internal replay API: one request returns
 the complete event-sourced game log, final scores/winner, and per-player
-stats, with no gaps to work around and no DOM scraping involved.
+stats, with no gaps to work around and no DOM scraping involved. There's no
+automated way to call that endpoint from this project (colonist.io's
+Cloudflare layer blocks scripted requests to it) — instead, capture a raw
+payload with the Chrome extension (`extension/`, see below) or by copying it
+straight out of DevTools' Network tab while browsing a replay on colonist.io,
+then decode it:
 
 ```bash
-# 1. Get your session JWT: DevTools -> Application -> Cookies on colonist.io
-#    while logged in -> jwt_colonist.io. Put it in server/.env (see server/.env.example):
-#    COLONIST_JWT=<value>
-
-# 2. Fetch the raw event history for a finished game you played in.
-#    <player_color> is your seat's color code, from the replay URL's
-#    playerColor= query param.
-python3 server/extractor/fetch_game.py <game_id> <player_color> -o game_data.json
-
-# 3. Decode the raw codes (resource/piece/achievement/dev-card enums, message
-#    types) into human-readable text and pull out per-player stats.
+# Decode the raw codes (resource/piece/achievement/dev-card enums, message
+# types) into human-readable text and pull out per-player stats.
 python3 server/extractor/decode_game.py game_data.json -o decoded.json
 ```
 
 ## Running the server + app
 
-The CLI flow above is now also available as a triggerable web action that
-stores results in MongoDB instead of writing local JSON files.
+Decoding is also available as a stored, queryable pipeline: post a raw
+payload to the backend and it lands in MongoDB instead of a local JSON file.
 
 ```bash
-# server/.env additionally needs:
-#   COLONIST_USERNAME=<your colonist.io username>   # whose match history to pull
+# server/.env needs:
 #   MONGODB_URI=mongodb://...
 #   MONGODB_DB=colonist_tracker
 
@@ -46,50 +43,63 @@ npm install
 npm run dev   # http://localhost:5173
 ```
 
-Open the app and enter how many games to fetch, or call the API directly:
+Ingest a captured payload through the dashboard's `/ingest` page, the Chrome
+extension (below), or directly:
 
 ```bash
-curl -X POST localhost:8000/api/games/fetch \
+curl -X POST localhost:8000/api/games/ingest \
   -H 'Content-Type: application/json' \
-  -d '{"count": 10}'
+  -H 'Authorization: Bearer <admin token or ingest API token>' \
+  -d '{"raw": { ... }}'
 ```
 
-**`POST /api/games/fetch`** — body `{"count": <1-100>, "username"?: <string>}`
-(`username` defaults to `COLONIST_USERNAME`). It calls colonist.io's public
-match-history endpoint (`GET /api/profile/{username}/history` — no JWT
-needed), filters to finished games with a replay available, takes the most
-recent `count`, resolves each game's `player_color` by matching the
-history's `profileUserId` against that game's own `players[]` entry, then
-fetches + decodes + upserts each into MongoDB's `games` collection (skipping
-any `game_id` already stored, so re-triggering is safe). Response:
-
-```jsonc
-{
-  "requested_count": 10,
-  "stored_count": 7,
-  "skipped_count": 3,
-  "results": [
-    { "game_id": "254552508", "status": "stored", "reason": null },
-    { "game_id": "249703043", "status": "skipped", "reason": "already_stored" }
-  ]
-}
-```
-
-Each document in the `games` collection:
+The raw payload lands in a separate
+`raw_games` collection, keyed by `game_id` — the durable source of truth.
+From it, `server/services/game_documents.py` derives the flat, queryable
+document actually stored in `games` (below; roughly `decoded.json`'s shape
+plus `source_username`/`player_color`/`fetched_at`), and
+`server/services/timeline_documents.py` derives a per-event playback
+document in `game_timelines`. Both are cheap to rebuild from `raw_games`
+alone (`server/scripts/rebuild_games.py` / `rebuild_timelines.py`) whenever
+their schema changes, without re-fetching from colonist.io — see `CLAUDE.md`
+for the full storage architecture, which is kept more current than this file.
 
 ```jsonc
 {
   "game_id": "254552508",
-  "raw": { /* exactly what fetch_game.py writes -- see game_data.json shape below */ },
-  "decoded": { /* exactly what decode_game.py's decode() produces -- see decoded.json shape below */ },
+  "played_at": "2026-09-03T23:51:00Z",
   "player_color": 3,
   "source_username": "HalfBldPrnce",
-  "fetched_at": "2026-09-03T23:51:00Z"
+  "fetched_at": "2026-09-03T23:51:00Z",
+  // ...the rest of decode_game.py's decode() output, flattened onto this
+  // document -- players, board, log, dice_roll_distribution, etc.
 }
 ```
 
-There's no "list stored games" endpoint yet — that comes once the dashboard
-needs it.
+`GET /api/games` lists stored games (paginated, filterable by player);
+`GET /api/games/{game_id}` returns one game's full detail;
+`GET /api/games/{game_id}/timeline` returns its turn-by-turn replay data;
+`GET /api/stats/*` serves the dashboard's cross-game stats. See
+`server/routes/` for the full list.
+
+### Auth
+
+Every `/api/admin/*` route requires an admin login (email/username/password,
+`POST /api/users/login`); new accounts stay `pending` until an admin
+approves them. `POST /api/games/ingest` accepts either a logged-in admin's
+bearer token or the single admin-managed ingest API token, so the Chrome
+extension (below) can post captures without an interactive session. See
+"Auth" in `CLAUDE.md` for the full picture.
+
+### Browser extension (`extension/`)
+
+The primary way to get a game's replay data into the backend, since
+colonist.io's Cloudflare layer blocks automated requests to the replay
+endpoint: a Manifest V3 Chrome extension that watches the colonist.io tab's
+own network calls to the replay endpoint and posts captured payloads
+straight to `POST /api/games/ingest`, authorized with the ingest API token
+from the dashboard's `/admin` page. See `extension/README.md` for load/setup
+instructions.
 
 ## `decoded.json` structure
 
@@ -257,16 +267,40 @@ decoded and are left as raw codes.
 ```
 server/
   extractor/
-    fetch_game.py              # colonist.io replay API -> raw payload
-    decode_game.py             # raw payload -> decoded/human-readable payload
-  config.py                    # loads server/.env
-  db/                          # motor connection, lifespan-managed
-  models/game.py                # request/response Pydantic models
-  services/colonist_history.py  # GET /api/profile/{username}/history
-  services/game_ingest.py       # select games, fetch+decode+store
-  routes/games.py                # POST /api/games/fetch
-  main.py                        # FastAPI app
+    decode_game.py                 # raw payload -> decoded/human-readable payload
+  config.py                        # loads server/.env
+  db/                              # motor connection, lifespan-managed
+  models/                          # game.py, user.py, player.py, api_token.py
+  services/
+    game_ingest.py                 # decode+store a raw payload
+    game_documents.py              # raw payload -> games collection document
+    timeline_documents.py          # raw payload -> game_timelines collection document
+    game_queries.py                # games/stats read-side queries
+    auth.py, user_auth.py          # login, tokens, require_admin
+    api_tokens.py                  # shared ingest API token
+    player_registry.py             # link app users to players by username
+  routes/
+    games.py                       # POST /api/games/ingest, GET /api/games*
+    stats.py                       # GET /api/stats/*
+    users.py                       # signup/login
+    admin.py                       # pending-user approval, ingest token
+  scripts/
+    rebuild_games.py               # reprocess raw_games -> games
+    rebuild_timelines.py           # reprocess raw_games -> game_timelines
+  main.py                          # FastAPI app
 app/
-  app/routes/home.tsx          # fetch-trigger UI
-  app/services/                # api.ts fetch wrapper + games.ts
+  app/routes/
+    home.tsx                       # games list / ingestion history (landing page)
+    game-detail.tsx                # single game detail view
+    game-replay.tsx                # turn-by-turn replay scrubber
+    stats.tsx                      # cross-game stats
+    ingest.tsx                     # paste-raw-JSON ingest form (admin-gated)
+    auth.tsx                       # login / signup
+    profile.tsx                    # logged-in user's profile
+    admin.tsx                      # signup approval + ingest token panel (admin-gated)
+  app/services/                    # api.ts fetch wrapper, auth.ts, games.ts
+  app/components/                  # board/, charts/, ui/ (MatrixTable, EventLogList, ...)
+extension/
+  inject.js, content.js, background.js, popup.{html,js,css}  # capture + relay to backend
+  manifest.json                    # Manifest V3 config
 ```

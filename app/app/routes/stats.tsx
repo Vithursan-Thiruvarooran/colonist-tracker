@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { type CorrelationPoint, CorrelationScatterChart } from "../components/charts/CorrelationScatterChart";
 import { DiceRollChart } from "../components/charts/DiceRollChart";
 import { PlayerScatterChart } from "../components/charts/PlayerScatterChart";
 import { RankedBarChart, type RankedBarRow } from "../components/charts/RankedBarChart";
@@ -10,11 +11,13 @@ import { Table, Td, Th } from "../components/ui/Table";
 import { Tip } from "../components/ui/Tip";
 import { SEQUENTIAL_HUE } from "../lib/chartTheme";
 import {
+  getPlayerGameRows,
   getPlayerStats,
   getStatsOverview,
   listGames,
   type GameSummary,
   type PlayerAggregateStats,
+  type PlayerGameRow,
   type StatsOverview,
 } from "../services/games";
 
@@ -53,14 +56,16 @@ export default function Stats() {
   const [players, setPlayers] = useState<PlayerAggregateStats[] | null>(null);
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [recentGames, setRecentGames] = useState<GameSummary[] | null>(null);
+  const [playerGameRows, setPlayerGameRows] = useState<PlayerGameRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getPlayerStats(), getStatsOverview(), listGames({ limit: TREND_GAME_LIMIT })])
-      .then(([p, o, games]) => {
+    Promise.all([getPlayerStats(), getStatsOverview(), listGames({ limit: TREND_GAME_LIMIT }), getPlayerGameRows()])
+      .then(([p, o, games, rows]) => {
         setPlayers(p);
         setOverview(o);
         setRecentGames(games);
+        setPlayerGameRows(rows);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"));
   }, []);
@@ -69,7 +74,7 @@ export default function Stats() {
     return <p className="text-sm text-error">{error}</p>;
   }
 
-  if (!players || !overview || !recentGames) {
+  if (!players || !overview || !recentGames || !playerGameRows) {
     return <p className="text-sm text-seafoam-dim">Loading…</p>;
   }
 
@@ -102,6 +107,24 @@ export default function Stats() {
   const turnsTrend: TimeSeriesPoint[] = chronoGames
     .filter((g) => g.total_turns != null)
     .map((g) => ({ label: shortDate(g.played_at), value: g.total_turns ?? 0 }));
+
+  const pipsVsVp: CorrelationPoint[] = playerGameRows
+    .filter((r): r is PlayerGameRow & { starting_placement_pips: number; final_victory_points: number } =>
+      r.starting_placement_pips != null && r.final_victory_points != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.starting_placement_pips, y: r.final_victory_points }));
+
+  const devCardsVsRobbing: CorrelationPoint[] = playerGameRows
+    .filter((r): r is PlayerGameRow & { dev_cards_used: number; robbing_income: number } =>
+      r.dev_cards_used != null && r.robbing_income != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.dev_cards_used, y: r.robbing_income }));
+
+  const tradesProposedVsSuccessful: CorrelationPoint[] = playerGameRows
+    .filter((r): r is PlayerGameRow & { proposed_trades: number; successful_trades: number } =>
+      r.proposed_trades != null && r.successful_trades != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.proposed_trades, y: r.successful_trades }));
 
   return (
     <div>
@@ -166,6 +189,51 @@ export default function Stats() {
           />
         </Panel>
       )}
+
+      <SectionHeader
+        title="Correlations across games"
+        caption="One point per player per game -- what tends to move together, not just who's ahead on average."
+      />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {pipsVsVp.length > 1 && (
+          <Panel>
+            <h3 className="mb-1 text-sm font-medium text-ink-dim">Starting placement pips vs. final score</h3>
+            <p className="mb-3 text-xs text-ink-dim">
+              Pips are the combined dice-frequency weight of both starting settlements' adjacent hexes -- higher
+              means more likely production.
+            </p>
+            <CorrelationScatterChart
+              data={pipsVsVp}
+              xLabel="Starting pips"
+              yLabel="Final VP"
+              formatX={(v) => v.toFixed(0)}
+              formatY={(v) => v.toFixed(0)}
+            />
+          </Panel>
+        )}
+        <Panel>
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Dev cards used vs. robbing income</h3>
+          <p className="mb-3 text-xs text-ink-dim">Knights played pull double duty -- army size and robber control.</p>
+          <CorrelationScatterChart
+            data={devCardsVsRobbing}
+            xLabel="Dev cards used"
+            yLabel="Robbing income"
+            formatX={(v) => v.toFixed(0)}
+            formatY={(v) => v.toFixed(0)}
+          />
+        </Panel>
+        <Panel>
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Trades proposed vs. successful</h3>
+          <p className="mb-3 text-xs text-ink-dim">How much proposing actually converts, across every game.</p>
+          <CorrelationScatterChart
+            data={tradesProposedVsSuccessful}
+            xLabel="Proposed"
+            yLabel="Successful"
+            formatX={(v) => v.toFixed(0)}
+            formatY={(v) => v.toFixed(0)}
+          />
+        </Panel>
+      </div>
 
       <SectionHeader
         title="Dice rolls across all games"

@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     await db.games.create_index("game_id", unique=True)
     await db.games.create_index("players.user_id")
     await db.games.create_index("played_at")
+    await db.game_timelines.create_index("game_id", unique=True)
     await db.players.create_index("player_id", unique=True)
     await db.players.create_index(
         "colonist_user_id", unique=True, partialFilterExpression={"colonist_user_id": {"$type": "string"}}
