@@ -1,41 +1,31 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router";
 
+import { AuthGate } from "../components/ui/AuthGate";
 import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
 import { Input, Label } from "../components/ui/Input";
 import { Panel } from "../components/ui/Panel";
-import { fetchMe, isLoggedIn, updateProfile, type UserProfile } from "../services/auth";
+import { Button } from "../components/ui/Button";
+import { useAuthGate } from "../hooks/useAuthGate";
+import { DEFAULT_PLAYER_COLOR, updateProfile, type UserProfile } from "../services/auth";
 
 export default function Profile() {
-  const [status, setStatus] = useState<"loading" | "unauthorized" | "ready">("loading");
+  const { status, profile: loadedProfile } = useAuthGate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [color, setColor] = useState(DEFAULT_PLAYER_COLOR);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    if (!isLoggedIn()) {
-      setStatus("unauthorized");
-      return;
-    }
-    try {
-      const me = await fetchMe();
-      setProfile(me);
-      setEmail(me.email);
-      setUsername(me.username);
-      setStatus("ready");
-    } catch {
-      setStatus("unauthorized");
-    }
-  }
+    if (!loadedProfile) return;
+    setProfile(loadedProfile);
+    setEmail(loadedProfile.email);
+    setUsername(loadedProfile.username);
+    setColor(loadedProfile.color);
+  }, [loadedProfile]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,10 +33,11 @@ export default function Profile() {
     setError(null);
     setSaved(false);
     try {
-      const update: { email?: string; username?: string; password?: string } = {};
+      const update: { email?: string; username?: string; password?: string; color?: string } = {};
       if (profile && email !== profile.email) update.email = email;
       if (profile && username !== profile.username) update.username = username;
       if (password) update.password = password;
+      if (profile && color !== profile.color) update.color = color;
 
       const updated = await updateProfile(update);
       setProfile(updated);
@@ -63,15 +54,12 @@ export default function Profile() {
 
   if (status === "unauthorized") {
     return (
-      <div>
-        <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Profile</h1>
-        <Panel className="max-w-md">
-          <p className="text-sm text-ink-dim">You need to be logged in to view your profile.</p>
-          <Link to="/login?next=/profile">
-            <Button className="mt-4">Log in</Button>
-          </Link>
-        </Panel>
-      </div>
+      <AuthGate
+        status={status}
+        title="Profile"
+        next="/profile"
+        unauthorizedMessage="You need to be logged in to view your profile."
+      />
     );
   }
 
@@ -110,6 +98,22 @@ export default function Profile() {
           <label>
             <Label>colonist.io username</Label>
             <Input value={username} onChange={(e) => setUsername(e.target.value)} required />
+          </label>
+
+          <label>
+            <Label>Player color</Label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                aria-label="Player color"
+                className="h-10 w-14 cursor-pointer rounded-md border border-ink-dim/25 bg-paper/60 p-1"
+              />
+              <span className="text-sm text-ink-dim">
+                Highlights you on the board and in charts wherever your games appear.
+              </span>
+            </div>
           </label>
 
           <label>

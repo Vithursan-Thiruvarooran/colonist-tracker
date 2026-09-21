@@ -270,6 +270,14 @@ VICTORY_POINT_WEIGHTS = {
 }
 
 
+def victory_point_percentage(final_vp: Optional[int], vp_to_win: Optional[int]) -> Optional[float]:
+    """Final VP as a percentage of victory_points_to_win -- None if either
+    side is missing (e.g. an unusual game with no configured VP target)."""
+    if final_vp is None or not vp_to_win:
+        return None
+    return round(final_vp / vp_to_win * 100, 1)
+
+
 def dev_card_name(code: Optional[int]) -> str:
     if code is None:
         return "?"
@@ -315,10 +323,13 @@ def victory_points_by_source(vp_by_source: dict) -> dict:
     (e.g. "0", "1") renamed to VICTORY_POINT_SOURCE_NAMES and its raw
     per-source counts converted to the actual VP each source contributes via
     VICTORY_POINT_WEIGHTS (e.g. a raw CITIES count of 1 becomes 2) -- so this
-    dict's values always sum to the player's true final VP total. LARGEST_ARMY/
-    LONGEST_ROAD are only present in the raw dict for whoever holds them, so
-    the result likewise omits a source a player doesn't have (rather than
-    reporting it as 0)."""
+    dict's values always sum to the player's true final VP total.
+    LARGEST_ARMY/LONGEST_ROAD are usually absent from the raw dict for a
+    player who doesn't hold them, but not reliably -- a real game has shown
+    the key present with a raw count of 0 for a non-holder, so callers that
+    care whether a player actually holds one (see decode()'s
+    held_largest_army/held_longest_road) must check the value, not just key
+    presence."""
     result = {}
     for key, value in vp_by_source.items():
         try:
@@ -709,6 +720,197 @@ def rejected_trade_matrix(event_history: dict, color_to_name: dict) -> dict:
     return matrix
 
 
+def turn_numbers_by_log_index(merged_log: dict) -> dict:
+    """{log_entry_index: turn_number} for every entry in merged_log --
+    colonist logs no explicit turn number, so this derives one by counting
+    MessageType.DICE_ROLL entries seen so far (inclusive of the roll itself,
+    so a roll's own entry already belongs to the turn it starts). Entries
+    before the first roll (setup-phase placements, chat) get turn 0. Shared
+    by trades() and robber_moves_and_stats() so turn numbering can't drift
+    between the two -- the event stream's gameLogState entries use the same
+    index keys as merged_log, so no second counter is needed there.
+    """
+    turn = 0
+    result = {}
+    for idx, entry in _sorted_by_numeric_key(merged_log):
+        entry_text = entry.get("text", {})
+        if entry_text.get("type") == MessageType.DICE_ROLL:
+            turn += 1
+        result[int(idx)] = turn
+    return result
+
+
+def _resource_counts(codes: list) -> dict:
+    counts: dict = {}
+    for code in codes or []:
+        name = resource_name(code)
+        counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _bank_trade_type(given_codes: list) -> str:
+    """TRADE_BANK carries no explicit bank-vs-port flag -- inferred from the
+    given-resource count, since the rate itself tells you: 4 (no port) is
+    the base bank rate, 3 is a generic 3:1 port, 2 is a resource-specific
+    2:1 port (see PortType)."""
+    return "bank" if len(given_codes or []) >= 4 else "port"
+
+
+def trades(merged_log: dict, turn_by_index: dict, color_to_name: dict) -> list:
+    """Every completed trade this game, turn-stamped via turn_by_index --
+    player-to-player (MessageType.TRADE_PLAYER) and with the bank/a port
+    (MessageType.TRADE_BANK). TRADE_COUNTER_OFFER/TRADE_OFFER_OPEN are
+    proposals, not completed trades (same exclusion as trade_matrix)."""
+    result = []
+    for idx, entry in _sorted_by_numeric_key(merged_log):
+        entry_text = entry.get("text", {})
+        t = entry_text.get("type")
+        if t == MessageType.TRADE_PLAYER:
+            given = entry_text.get("givenCardEnums") or []
+            received = entry_text.get("receivedCardEnums") or []
+            result.append(
+                {
+                    "turn": turn_by_index.get(int(idx), 0),
+                    "trade_type": "player",
+                    "player_a": color_to_name.get(entry_text.get("playerColor")),
+                    "player_b": color_to_name.get(entry_text.get("acceptingPlayerColor")),
+                    "given": _resource_counts(given),
+                    "received": _resource_counts(received),
+                }
+            )
+        elif t == MessageType.TRADE_BANK:
+            given = entry_text.get("givenCardEnums") or []
+            received = entry_text.get("receivedCardEnums") or []
+            result.append(
+                {
+                    "turn": turn_by_index.get(int(idx), 0),
+                    "trade_type": _bank_trade_type(given),
+                    "player_a": color_to_name.get(entry_text.get("playerColor")),
+                    "player_b": None,
+                    "given": _resource_counts(given),
+                    "received": _resource_counts(received),
+                }
+            )
+    return result
+
+
+def _trade_ratio(given: dict, received: dict) -> Optional[float]:
+    given_count = sum(given.values())
+    received_count = sum(received.values())
+    if not received_count:
+        return None
+    return given_count / received_count
+
+
+def _add_counts(target: dict, counts: dict) -> None:
+    for resource, count in counts.items():
+        target[resource] = target.get(resource, 0) + count
+
+
+def trading_stats_by_player(trades_list: list, players: list, winner_name: Optional[str]) -> dict:
+    """Per-player trading aggregates derived from trades() -- both sides of a
+    player-to-player trade are folded onto each participant (the accepter's
+    given/received is the mirror of the proposer's given/received), so
+    resources_given/received are complete regardless of who proposed.
+    most_valuable_partner is whoever this player received the most resource
+    cards from via player-to-player trades (not just the most frequent
+    partner -- see trade_matrix/robbery_matrix for pure counts)."""
+    stats = {
+        p.name: {
+            "trades_total": 0,
+            "player_trades": 0,
+            "bank_trades": 0,
+            "port_trades": 0,
+            "resources_given": {},
+            "resources_received": {},
+            "most_traded_resource": None,
+            "most_valuable_partner": None,
+            "most_valuable_partner_resources": 0,
+            "avg_trade_ratio": None,
+            "trades_with_winner": 0,
+            "trades_with_winner_share": None,
+        }
+        for p in players
+    }
+    ratios_by_player: dict = {}
+    partner_value_by_player: dict = {}
+
+    for trade in trades_list:
+        a, b = trade["player_a"], trade["player_b"]
+        given, received = trade["given"], trade["received"]
+
+        if a in stats:
+            row = stats[a]
+            row["trades_total"] += 1
+            row[f"{trade['trade_type']}_trades"] += 1
+            _add_counts(row["resources_given"], given)
+            _add_counts(row["resources_received"], received)
+            ratio = _trade_ratio(given, received)
+            if ratio is not None:
+                ratios_by_player.setdefault(a, []).append(ratio)
+            if b is not None:
+                if b == winner_name:
+                    row["trades_with_winner"] += 1
+                partner_value_by_player.setdefault(a, {})
+                partner_value_by_player[a][b] = partner_value_by_player[a].get(b, 0) + sum(received.values())
+
+        if b is not None and b in stats:
+            row = stats[b]
+            row["trades_total"] += 1
+            row["player_trades"] += 1
+            # the accepter's given/received is the mirror of the proposer's
+            _add_counts(row["resources_given"], received)
+            _add_counts(row["resources_received"], given)
+            ratio = _trade_ratio(received, given)
+            if ratio is not None:
+                ratios_by_player.setdefault(b, []).append(ratio)
+            if a == winner_name:
+                row["trades_with_winner"] += 1
+            partner_value_by_player.setdefault(b, {})
+            partner_value_by_player[b][a] = partner_value_by_player[b].get(a, 0) + sum(given.values())
+
+    for name, row in stats.items():
+        combined = dict(row["resources_given"])
+        _add_counts(combined, row["resources_received"])
+        if combined:
+            row["most_traded_resource"] = max(combined, key=combined.get)
+
+        partners = partner_value_by_player.get(name)
+        if partners:
+            best_partner = max(partners, key=partners.get)
+            row["most_valuable_partner"] = best_partner
+            row["most_valuable_partner_resources"] = partners[best_partner]
+
+        ratios = ratios_by_player.get(name)
+        if ratios:
+            row["avg_trade_ratio"] = round(sum(ratios) / len(ratios), 2)
+
+        if row["player_trades"]:
+            row["trades_with_winner_share"] = round(row["trades_with_winner"] / row["player_trades"], 2)
+
+    return stats
+
+
+def trading_stats_overview(trades_list: list) -> dict:
+    """Game-level trading aggregates -- the counterpart to
+    trading_stats_by_player, one row instead of one per player."""
+    counts = {"trades_total": 0, "player_trades": 0, "bank_trades": 0, "port_trades": 0}
+    combined_resources: dict = {}
+    ratios = []
+    for trade in trades_list:
+        counts["trades_total"] += 1
+        counts[f"{trade['trade_type']}_trades"] += 1
+        _add_counts(combined_resources, trade["given"])
+        _add_counts(combined_resources, trade["received"])
+        ratio = _trade_ratio(trade["given"], trade["received"])
+        if ratio is not None:
+            ratios.append(ratio)
+
+    counts["most_traded_resource"] = max(combined_resources, key=combined_resources.get) if combined_resources else None
+    counts["average_trade_ratio"] = round(sum(ratios) / len(ratios), 2) if ratios else None
+    return counts
+
+
 def iter_decoded_events(event_history: dict, color_to_name: dict):
     """Walks eventHistory["events"] in order, yielding one record per raw
     event with its gameLogState entries and mapState/robber deltas decoded --
@@ -838,6 +1040,174 @@ def starting_placements(event_history: dict, color_to_name: dict, board: dict) -
             "starting_placement_resources": resources,
         }
     return result
+
+
+def robber_moves_and_stats(event_history: dict, board: dict, turn_by_index: dict, color_to_name: dict) -> dict:
+    """Every robber movement this game, turn-stamped via turn_by_index, plus
+    the derived "robber impact": resources denied to other players'
+    production while the robber sat on their hex.
+
+    Walks event_history's events once, maintaining running corner ownership
+    (partial updates, same idea as build_merged_map_state) and the current
+    robber tile -- knowing which buildings a blocked hex actually touched,
+    and whether a later dice roll matched it, requires state as of that
+    point in time, not the final board.
+
+    card_stolen is only known when this payload's capturing player was the
+    thief or the victim of a given robbery (colonist only reveals the stolen
+    card's type to those two players, via
+    MessageType.ROBBERY_PRIVATE_THIEF/VICTIM) -- most moves will have
+    card_stolen: None, same caveat as dev_cards_by_player's "unknown"
+    bucket. The pre-game desert placement (nobody moved it there) is tracked
+    internally for from_tile_index/timing purposes but never emitted as a
+    move record.
+    """
+    hexes_by_index = {h["index"]: h for h in board["hexes"]}
+    hex_to_corners: dict = {}
+    for corner in board["corners"]:
+        for hex_idx in corner["hex_indices"]:
+            hex_to_corners.setdefault(hex_idx, []).append(corner["index"])
+
+    def hex_resource(hex_state: Optional[dict]) -> Optional[str]:
+        return _TERRAIN_RESOURCE_NAMES.get(hex_state["terrain"]) if hex_state else None
+
+    corner_state: dict = {}  # corner_index -> {"owner": name, "building_type": "settlement"/"city"}
+
+    def buildings_on_tile(tile_index) -> list:
+        result = []
+        for corner_idx in hex_to_corners.get(tile_index, []):
+            state = corner_state.get(corner_idx)
+            if state and state.get("owner"):
+                result.append((state["owner"], state.get("building_type")))
+        return result
+
+    robber_tile_index = event_history.get("initialState", {}).get("mechanicRobberState", {}).get("locationTileIndex")
+    current_mover = None
+    pending_turn = 0
+    pending_mover = None
+    pending_record = None
+    turns_blocked_by_mover: dict = {}
+
+    def close_pending(closing_turn: int) -> None:
+        if pending_record is not None:
+            pending_record["turns_blocked"] = closing_turn - pending_turn
+            if pending_mover is not None:
+                turns_blocked_by_mover.setdefault(pending_mover, []).append(pending_record["turns_blocked"])
+
+    moves: list = []
+    times_moved: dict = {}
+    times_robbed: dict = {}
+    times_blocked_on_tile: dict = {}
+    production_denied_to_others: dict = {}
+    production_lost_to_robber: dict = {}
+    production_lost_by_resource: dict = {}
+
+    turn = 0
+    for event in event_history.get("events", []):
+        state_change = event.get("stateChange", {})
+        map_state = state_change.get("mapState", {})
+        robber_state = state_change.get("mechanicRobberState", {})
+
+        for corner_idx, delta in map_state.get("tileCornerStates", {}).items():
+            state = corner_state.setdefault(int(corner_idx), {})
+            if "owner" in delta:
+                state["owner"] = color_to_name.get(delta["owner"])
+            if "buildingType" in delta:
+                state["building_type"] = building_type_name(delta["buildingType"])
+
+        for idx, raw_entry in _sorted_by_numeric_key(state_change.get("gameLogState", {})):
+            entry_text = raw_entry.get("text", {})
+            t = entry_text.get("type")
+            turn = turn_by_index.get(int(idx), turn)
+
+            if t == MessageType.DICE_ROLL:
+                roll = (entry_text.get("firstDice") or 0) + (entry_text.get("secondDice") or 0)
+                hex_state = hexes_by_index.get(robber_tile_index)
+                resource = hex_resource(hex_state) if hex_state and hex_state.get("dice_number") == roll else None
+                if resource:
+                    for owner, building_type in buildings_on_tile(robber_tile_index):
+                        amount = 2 if building_type == "city" else 1
+                        production_lost_to_robber[owner] = production_lost_to_robber.get(owner, 0) + amount
+                        by_resource = production_lost_by_resource.setdefault(owner, {})
+                        by_resource[resource] = by_resource.get(resource, 0) + amount
+                        if current_mover is not None:
+                            production_denied_to_others[current_mover] = (
+                                production_denied_to_others.get(current_mover, 0) + amount
+                            )
+
+            elif t == MessageType.ROBBER_MOVED:
+                to_tile_index = robber_state.get("locationTileIndex")
+                if to_tile_index is None:
+                    continue
+                close_pending(turn)
+
+                mover = color_to_name.get(entry_text.get("playerColor"))
+                hex_state = hexes_by_index.get(to_tile_index)
+                players_on_tile = sorted({owner for owner, _ in buildings_on_tile(to_tile_index)})
+                for player in players_on_tile:
+                    times_blocked_on_tile[player] = times_blocked_on_tile.get(player, 0) + 1
+
+                record = {
+                    "turn": turn,
+                    "player": mover,
+                    "from_tile_index": robber_tile_index,
+                    "to_tile_index": to_tile_index,
+                    "to_terrain": hex_state["terrain"] if hex_state else "?",
+                    "to_resource": hex_resource(hex_state),
+                    "players_on_tile": players_on_tile,
+                    "target_player": None,
+                    "card_stolen": None,
+                    "turns_blocked": None,
+                }
+                moves.append(record)
+                if mover is not None:
+                    times_moved[mover] = times_moved.get(mover, 0) + 1
+
+                robber_tile_index = to_tile_index
+                current_mover = mover
+                pending_turn, pending_mover, pending_record = turn, mover, record
+
+            elif t == MessageType.ROBBERY_PUBLIC:
+                if pending_record is not None and pending_record["target_player"] is None:
+                    thief = color_to_name.get(entry_text.get("playerColorThief"))
+                    victim = color_to_name.get(entry_text.get("playerColorVictim"))
+                    if thief == pending_mover:
+                        pending_record["target_player"] = victim
+                        if victim is not None:
+                            times_robbed[victim] = times_robbed.get(victim, 0) + 1
+
+            elif t in (MessageType.ROBBERY_PRIVATE_THIEF, MessageType.ROBBERY_PRIVATE_VICTIM):
+                if pending_record is not None and pending_record["card_stolen"] is None:
+                    card_enums = entry_text.get("cardEnums") or []
+                    if card_enums:
+                        pending_record["card_stolen"] = resource_name(card_enums[0])
+
+    close_pending(turn)
+
+    player_names = list(color_to_name.values())
+    stats_by_player = {}
+    for name in player_names:
+        blocked_turns = turns_blocked_by_mover.get(name)
+        stats_by_player[name] = {
+            "times_moved_robber": times_moved.get(name, 0),
+            "times_robbed": times_robbed.get(name, 0),
+            "times_blocked_on_tile": times_blocked_on_tile.get(name, 0),
+            "production_denied_to_others": production_denied_to_others.get(name, 0),
+            "production_lost_to_robber": production_lost_to_robber.get(name, 0),
+            "production_lost_to_robber_by_resource": production_lost_by_resource.get(name, {}),
+            "avg_turns_blocked_per_placement": (
+                round(sum(blocked_turns) / len(blocked_turns), 2) if blocked_turns else None
+            ),
+        }
+
+    all_blocked_turns = [t for turns in turns_blocked_by_mover.values() for t in turns]
+    overview = {
+        "total_robber_moves": len(moves),
+        "total_production_prevented": sum(production_lost_to_robber.values()),
+        "avg_turns_blocked": round(sum(all_blocked_turns) / len(all_blocked_turns), 2) if all_blocked_turns else None,
+    }
+
+    return {"moves": moves, "stats_by_player": stats_by_player, "overview": overview}
 
 
 def build_timeline(event_history: dict, players: list, color_to_name: dict) -> dict:
@@ -1032,12 +1402,40 @@ def decode(data: dict) -> dict:
 
     eh = data.get("eventHistory", {})
     merged_log = build_merged_gamelog(eh)
+    turn_by_index = turn_numbers_by_log_index(merged_log)
     dev_cards_by_name = dev_cards_by_player(merged_log, players)
     board = build_board(eh, color_to_name)
     starting_placements_by_name = starting_placements(eh, color_to_name, board)
     robbery_matrix_by_name = robbery_matrix(merged_log, color_to_name)
     trade_matrix_by_name = trade_matrix(merged_log, color_to_name)
     rejected_trade_matrix_by_name = rejected_trade_matrix(eh, color_to_name)
+
+    trades_list = trades(merged_log, turn_by_index, color_to_name)
+    winner_name = next((p.name for p in players if p.is_winner), None)
+    trading_stats_by_name = trading_stats_by_player(trades_list, players, winner_name)
+    trading_overview = trading_stats_overview(trades_list)
+    robber_result = robber_moves_and_stats(eh, board, turn_by_index, color_to_name)
+
+    settings = data.get("gameSettings", {})
+    vp_to_win = settings.get("victoryPointsToWin")
+    play_order_names = [color_to_name.get(c, c) for c in data.get("playOrder", [])]
+    players_payload = [dataclasses.asdict(p) for p in players]
+    for player_dict in players_payload:
+        player_dict["victory_point_percentage"] = victory_point_percentage(
+            player_dict["final_victory_points"], vp_to_win
+        )
+        # 1-indexed turn-order seat (1st to act, 2nd to act, ...) -- distinct
+        # from `rank`, which is finishing position, not seating order.
+        player_dict["play_order_position"] = (
+            play_order_names.index(player_dict["name"]) + 1 if player_dict["name"] in play_order_names else None
+        )
+        # Despite VictoryPointSource's docstring, a real game has shown
+        # LARGEST_ARMY/LONGEST_ROAD present for a non-holder too, with a raw
+        # count of 0 -- so the key's weighted VP value has to be checked, not
+        # just whether the key exists.
+        vp_sources = player_dict.get("victory_points_by_source") or {}
+        player_dict["held_largest_army"] = vp_sources.get("largest_army", 0) > 0
+        player_dict["held_longest_road"] = vp_sources.get("longest_road", 0) > 0
 
     log_entries = []
     for idx, raw_entry in _sorted_by_numeric_key(merged_log):
@@ -1058,14 +1456,13 @@ def decode(data: dict) -> dict:
         )
 
     end_state = eh.get("endGameState", {})
-    settings = data.get("gameSettings", {})
 
     return {
         "game_id": data.get("databaseGameId"),
-        "play_order": [color_to_name.get(c, c) for c in data.get("playOrder", [])],
-        "players": [dataclasses.asdict(p) for p in players],
+        "play_order": play_order_names,
+        "players": players_payload,
         "settings": {
-            "victory_points_to_win": settings.get("victoryPointsToWin"),
+            "victory_points_to_win": vp_to_win,
             "is_ranked": data.get("gameDetails", {}).get("isRanked"),
         },
         "duration_ms": end_state.get("gameDurationInMS"),
@@ -1078,6 +1475,12 @@ def decode(data: dict) -> dict:
         "robbery_matrix": robbery_matrix_by_name,
         "trade_matrix": trade_matrix_by_name,
         "rejected_trade_matrix": rejected_trade_matrix_by_name,
+        "trades": trades_list,
+        "trading_stats_by_player": trading_stats_by_name,
+        "trading_stats": trading_overview,
+        "robber_moves": robber_result["moves"],
+        "robber_stats_by_player": robber_result["stats_by_player"],
+        "robber_stats": robber_result["overview"],
         "board": board,
         "log": [dataclasses.asdict(e) for e in log_entries],
     }

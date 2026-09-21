@@ -12,7 +12,10 @@ import { Panel, RawPanel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
 import { Tip } from "../components/ui/Tip";
+import { WinnerCrown } from "../components/ui/WinnerCrown";
+import { useViewerColor } from "../hooks/useViewerColor";
 import { categoricalColor } from "../lib/chartTheme";
+import { formatDateTime, formatDuration } from "../lib/format";
 import { getGame, type GameDetail as GameDetailType } from "../services/games";
 
 const VP_SOURCES: CompositionSource[] = [
@@ -104,27 +107,12 @@ const DEV_CARD_SOURCES: CompositionSource[] = [
   },
 ];
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms == null) return "—";
-  return `${Math.round(ms / 60000)} min`;
-}
-
 export default function GameDetail() {
   const { gameId } = useParams();
   const [game, setGame] = useState<GameDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
+  const viewerColor = useViewerColor();
 
   useEffect(() => {
     if (!gameId) return;
@@ -149,6 +137,7 @@ export default function GameDetail() {
     name: p.name,
     values: p.victory_points_by_source,
     total: p.final_victory_points ?? undefined,
+    isWinner: p.is_winner,
   }));
 
   const resourceIncomeRows = playersByRank.map((p) => ({
@@ -156,12 +145,14 @@ export default function GameDetail() {
     name: p.name,
     values: p.resource_stats,
     total: p.resource_stats.totalResourceIncome ?? undefined,
+    isWinner: p.is_winner,
   }));
 
   const devCardRows = playersByRank.map((p) => ({
     key: String(p.color),
     name: p.name,
     values: p.dev_cards,
+    isWinner: p.is_winner,
   }));
 
   const tradesData = playersByRank.map((p) => ({
@@ -184,7 +175,7 @@ export default function GameDetail() {
       <h1 className="font-display text-2xl font-medium text-parchment">Game {game.game_id}</h1>
 
       <div className="mt-3 mb-6 flex flex-wrap items-center gap-1.5">
-        <Badge tone="ocean">{formatDate(game.played_at)}</Badge>
+        <Badge tone="ocean">{formatDateTime(game.played_at)}</Badge>
         <Badge tone="ocean">{formatDuration(game.duration_ms)}</Badge>
         <Badge tone="ocean">{game.total_turns ?? "?"} turns</Badge>
         <Badge tone="ocean">{game.is_ranked ? "Ranked" : "Casual"}</Badge>
@@ -198,7 +189,7 @@ export default function GameDetail() {
             caption="Terrain, dice numbers, the robber, and every settlement, city, and road, reconstructed from the raw game data."
           />
           <Panel className="mb-6">
-            <CatanBoard board={game.board} players={game.players.map((p) => p.name)} />
+            <CatanBoard board={game.board} players={game.players.map((p) => p.name)} viewerColor={viewerColor} />
             <div className="mt-3 text-center">
               <Link to={`/games/${game.game_id}/replay`} className="text-sm text-brick hover:underline">
                 Watch replay →
@@ -263,6 +254,8 @@ export default function GameDetail() {
             players={playerNames}
             matrix={game.robbery_matrix}
             cellTip={(row, col, value) => `${row} robbed ${col} ${value} time${value === 1 ? "" : "s"}`}
+            winnerName={game.winner?.name}
+            viewerColor={viewerColor}
           />
         </Panel>
         <Panel>
@@ -273,6 +266,8 @@ export default function GameDetail() {
             cellTip={(row, col, value) =>
               `${row} traded with ${col} ${value} time${value === 1 ? "" : "s"} (${row} proposed, ${col} accepted)`
             }
+            winnerName={game.winner?.name}
+            viewerColor={viewerColor}
           />
         </Panel>
         <Panel>
@@ -287,8 +282,185 @@ export default function GameDetail() {
             cellTip={(row, col, value) =>
               `${col} rejected ${row}'s trade offer ${value} time${value === 1 ? "" : "s"}`
             }
+            winnerName={game.winner?.name}
+            viewerColor={viewerColor}
           />
         </Panel>
+      </div>
+
+      <SectionHeader
+        title="Trading"
+        caption="Resource flow and value per trade, on top of the raw counts above."
+      />
+      <Panel className="mb-6">
+        <Table>
+          <thead>
+            <tr>
+              <Th sticky>Player</Th>
+              <Th>
+                <Tip text="All completed trades -- with other players, the bank, or a port.">Trades</Tip>
+              </Th>
+              <Th>
+                <Tip text="Completed player-to-player trades.">Player</Tip>
+              </Th>
+              <Th>
+                <Tip text="Straight 4:1 bank trades (no port).">Bank</Tip>
+              </Th>
+              <Th>
+                <Tip text="3:1 or 2:1 trades via a port.">Port</Tip>
+              </Th>
+              <Th>
+                <Tip text="The resource this player gave or received most often, across every trade.">
+                  Most traded
+                </Tip>
+              </Th>
+              <Th>
+                <Tip text="Who gave this player the most resource cards via player-to-player trades.">
+                  Most valuable partner
+                </Tip>
+              </Th>
+              <Th>
+                <Tip text="Average resources given per resource received across this player's trades -- above 1.0 means they typically gave up more than they got.">
+                  Avg ratio
+                </Tip>
+              </Th>
+              <Th>
+                <Tip text="Share of this player's player-to-player trades that were with the eventual winner.">
+                  With winner
+                </Tip>
+              </Th>
+            </tr>
+          </thead>
+          <tbody>
+            {playersByRank.map((p) => {
+              const t = p.trading;
+              const hasStats = "trades_total" in t;
+              return (
+                <tr key={p.color}>
+                  <Td sticky>
+                    {p.name}
+                    {p.is_winner && <WinnerCrown className="ml-1" />}
+                  </Td>
+                  <Td>{hasStats ? t.trades_total : "—"}</Td>
+                  <Td>{hasStats ? t.player_trades : "—"}</Td>
+                  <Td>{hasStats ? t.bank_trades : "—"}</Td>
+                  <Td>{hasStats ? t.port_trades : "—"}</Td>
+                  <Td>{hasStats ? (t.most_traded_resource ?? "—") : "—"}</Td>
+                  <Td>
+                    {hasStats && t.most_valuable_partner
+                      ? `${t.most_valuable_partner} (${t.most_valuable_partner_resources})`
+                      : "—"}
+                  </Td>
+                  <Td>{hasStats && t.avg_trade_ratio != null ? t.avg_trade_ratio.toFixed(2) : "—"}</Td>
+                  <Td>
+                    {hasStats && t.trades_with_winner_share != null
+                      ? `${Math.round(t.trades_with_winner_share * 100)}%`
+                      : "—"}
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </Panel>
+
+      <SectionHeader
+        title="Robber"
+        caption="Every placement, and the estimated production it denied -- resources that would have been produced on a matching roll if the robber weren't sitting there."
+      />
+      <div className="mb-6 grid grid-cols-1 gap-3">
+        <Panel>
+          <h3 className="mb-3 text-sm font-medium text-ink-dim">Per player</h3>
+          <Table>
+            <thead>
+              <tr>
+                <Th sticky>Player</Th>
+                <Th>
+                  <Tip text="Times this player moved the robber.">Moved</Tip>
+                </Th>
+                <Th>
+                  <Tip text="Times this player was the actual target of a robbery (card stolen from them).">
+                    Robbed
+                  </Tip>
+                </Th>
+                <Th>
+                  <Tip text="Times the robber landed on a tile this player had a building on.">Blocked on tile</Tip>
+                </Th>
+                <Th>
+                  <Tip text="Resources this player's own robber placements prevented other players from producing.">
+                    Denied to others
+                  </Tip>
+                </Th>
+                <Th>
+                  <Tip text="Resources this player lost because the robber sat on their production tile during a matching roll.">
+                    Lost to robber
+                  </Tip>
+                </Th>
+                <Th>
+                  <Tip text="Average number of turns this player's own robber placements stayed put before being moved again.">
+                    Avg turns held
+                  </Tip>
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {playersByRank.map((p) => {
+                const r = p.robber;
+                const hasStats = "times_moved_robber" in r;
+                return (
+                  <tr key={p.color}>
+                    <Td sticky>
+                      {p.name}
+                      {p.is_winner && <WinnerCrown className="ml-1" />}
+                    </Td>
+                    <Td>{hasStats ? r.times_moved_robber : "—"}</Td>
+                    <Td>{hasStats ? r.times_robbed : "—"}</Td>
+                    <Td>{hasStats ? r.times_blocked_on_tile : "—"}</Td>
+                    <Td>{hasStats ? r.production_denied_to_others : "—"}</Td>
+                    <Td>{hasStats ? r.production_lost_to_robber : "—"}</Td>
+                    <Td>{hasStats && r.avg_turns_blocked_per_placement != null ? r.avg_turns_blocked_per_placement : "—"}</Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        </Panel>
+
+        {game.robber_moves.length > 0 && (
+          <Panel>
+            <h3 className="mb-3 text-sm font-medium text-ink-dim">Every placement</h3>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>Turn</Th>
+                  <Th>Player</Th>
+                  <Th>Tile</Th>
+                  <Th>Players on tile</Th>
+                  <Th>Target</Th>
+                  <Th>
+                    <Tip text="Only known when the captured game's own player was the thief or the victim.">
+                      Card stolen
+                    </Tip>
+                  </Th>
+                  <Th>Turns held</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {game.robber_moves.map((m, i) => (
+                  <tr key={i}>
+                    <Td>{m.turn}</Td>
+                    <Td>{m.player ?? "—"}</Td>
+                    <Td>{m.to_resource ? `${m.to_resource} (${m.to_terrain})` : m.to_terrain}</Td>
+                    <Td>{m.players_on_tile.length > 0 ? m.players_on_tile.join(", ") : "—"}</Td>
+                    <Td>{m.target_player ?? "—"}</Td>
+                    <Td>{m.card_stolen ?? "—"}</Td>
+                    <Td>{m.turns_blocked ?? "—"}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </Panel>
+        )}
       </div>
 
       <SectionHeader
@@ -322,9 +494,17 @@ export default function GameDetail() {
           <tbody>
             {playersByRank.map((p) => (
               <tr key={p.color}>
-                <Td sticky>{p.name}</Td>
+                <Td sticky>
+                  {p.name}
+                  {p.is_winner && <WinnerCrown className="ml-1" />}
+                </Td>
                 <Td>{p.rank ?? "—"}</Td>
-                <Td>{p.final_victory_points ?? "—"}</Td>
+                <Td>
+                  {p.final_victory_points ?? "—"}
+                  {p.victory_point_percentage != null && (
+                    <span className="ml-1 text-xs text-ink-dim">({p.victory_point_percentage}%)</span>
+                  )}
+                </Td>
                 {RESOURCE_STATS.map((s) => (
                   <Td key={s.key}>{p.resource_stats[s.key] ?? "—"}</Td>
                 ))}

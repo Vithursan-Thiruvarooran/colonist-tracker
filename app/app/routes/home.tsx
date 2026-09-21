@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { Panel } from "../components/ui/Panel";
+import { WinnerCrown } from "../components/ui/WinnerCrown";
 import { listGames, type GameSummary } from "../services/games";
 
 const PAGE_SIZE = 20;
@@ -46,7 +47,10 @@ function GameRow({ game }: { game: GameSummary }) {
               {players.map((p, i) => (
                 <span key={p.user_id ?? p.name}>
                   {i > 0 && ", "}
-                  <span className={p.is_winner ? "font-semibold text-ink" : undefined}>{p.name}</span>{" "}
+                  <span className={p.is_winner ? "font-semibold text-ink" : undefined}>
+                    {p.name}
+                    {p.is_winner && <WinnerCrown className="ml-0.5" />}
+                  </span>{" "}
                   <span className="tabular-nums">{p.final_victory_points ?? "?"}</span>
                 </span>
               ))}

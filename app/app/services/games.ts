@@ -28,9 +28,38 @@ export interface PlayerBrief {
   is_winner: boolean;
   rank: number | null;
   final_victory_points: number | null;
+  victory_point_percentage: number | null;
+  play_order_position: number | null;
+  held_largest_army: boolean;
+  held_longest_road: boolean;
   starting_placement_pips: number | null;
   starting_placement_resource_diversity: number | null;
   starting_placement_resources: Record<string, number>;
+}
+
+export interface PlayerTradingStats {
+  trades_total: number;
+  player_trades: number;
+  bank_trades: number;
+  port_trades: number;
+  resources_given: Record<string, number>;
+  resources_received: Record<string, number>;
+  most_traded_resource: string | null;
+  most_valuable_partner: string | null;
+  most_valuable_partner_resources: number;
+  avg_trade_ratio: number | null;
+  trades_with_winner: number;
+  trades_with_winner_share: number | null;
+}
+
+export interface PlayerRobberStats {
+  times_moved_robber: number;
+  times_robbed: number;
+  times_blocked_on_tile: number;
+  production_denied_to_others: number;
+  production_lost_to_robber: number;
+  production_lost_to_robber_by_resource: Record<string, number>;
+  avg_turns_blocked_per_placement: number | null;
 }
 
 export interface PlayerGameStats extends PlayerBrief {
@@ -38,6 +67,8 @@ export interface PlayerGameStats extends PlayerBrief {
   resource_stats: Record<string, number>;
   activity_stats: Record<string, number>;
   dev_cards: Record<string, number>;
+  trading: PlayerTradingStats | Record<string, never>;
+  robber: PlayerRobberStats | Record<string, never>;
 }
 
 export interface GameSummary {
@@ -136,6 +167,43 @@ export interface GameTimeline {
   steps: TimelineStep[];
 }
 
+export interface TradeRecord {
+  turn: number;
+  trade_type: "player" | "bank" | "port";
+  player_a: string | null;
+  player_b: string | null;
+  given: Record<string, number>;
+  received: Record<string, number>;
+}
+
+export interface TradingStatsOverview {
+  trades_total: number;
+  player_trades: number;
+  bank_trades: number;
+  port_trades: number;
+  most_traded_resource: string | null;
+  average_trade_ratio: number | null;
+}
+
+export interface RobberMove {
+  turn: number;
+  player: string | null;
+  from_tile_index: number | null;
+  to_tile_index: number;
+  to_terrain: string;
+  to_resource: string | null;
+  players_on_tile: string[];
+  target_player: string | null;
+  card_stolen: string | null;
+  turns_blocked: number | null;
+}
+
+export interface RobberStatsOverview {
+  total_robber_moves: number;
+  total_production_prevented: number;
+  avg_turns_blocked: number | null;
+}
+
 export interface GameDetail {
   game_id: string;
   played_at: string | null;
@@ -155,6 +223,10 @@ export interface GameDetail {
   robbery_matrix: Record<string, Record<string, number>>;
   trade_matrix: Record<string, Record<string, number>>;
   rejected_trade_matrix: Record<string, Record<string, number>>;
+  trades: TradeRecord[];
+  trading_stats: TradingStatsOverview | Record<string, never>;
+  robber_moves: RobberMove[];
+  robber_stats: RobberStatsOverview | Record<string, never>;
   log: LogEntry[];
 }
 
@@ -183,6 +255,10 @@ export interface PlayerGameRow {
   user_id: string | null;
   rank: number | null;
   final_victory_points: number | null;
+  victory_point_percentage: number | null;
+  play_order_position: number | null;
+  held_largest_army: boolean;
+  held_longest_road: boolean;
   is_winner: boolean;
   starting_placement_pips: number | null;
   starting_placement_resource_diversity: number | null;

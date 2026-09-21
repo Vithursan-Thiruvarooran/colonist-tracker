@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from server.db import get_db
 from server.models.user import (
+    DEFAULT_PLAYER_COLOR,
     SignupRequest,
     SignupResponse,
     UpdateProfileRequest,
@@ -34,6 +35,7 @@ async def _build_profile(user: Dict[str, Any], db) -> UserProfile:
         status=user["status"],
         is_admin=user["is_admin"],
         created_at=user["created_at"],
+        color=user.get("color") or DEFAULT_PLAYER_COLOR,
     )
 
 
@@ -64,7 +66,12 @@ async def me(user=Depends(get_current_user), db=Depends(get_db)):
 async def update_me(payload: UpdateProfileRequest, user=Depends(get_current_user), db=Depends(get_db)):
     try:
         updated = await update_user_profile(
-            db, user["user_id"], email=payload.email, username=payload.username, password=payload.password
+            db,
+            user["user_id"],
+            email=payload.email,
+            username=payload.username,
+            password=payload.password,
+            color=payload.color,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

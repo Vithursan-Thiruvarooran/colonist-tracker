@@ -9,7 +9,10 @@ export interface UserProfile {
   status: "pending" | "approved" | "rejected";
   is_admin: boolean;
   created_at: string;
+  color: string;
 }
+
+export const DEFAULT_PLAYER_COLOR = "#000000";
 
 export function getToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -53,6 +56,7 @@ export function updateProfile(update: {
   email?: string;
   username?: string;
   password?: string;
+  color?: string;
 }): Promise<UserProfile> {
   return apiFetch<UserProfile>("/api/users/me", {
     method: "PATCH",

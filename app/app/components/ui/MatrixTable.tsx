@@ -1,6 +1,7 @@
-import { categoricalColorForName, SEQUENTIAL_HUE } from "../../lib/chartTheme";
+import { resolvePlayerColor, SEQUENTIAL_HUE, type ViewerColor } from "../../lib/chartTheme";
 import { Table, Td, Th } from "./Table";
 import { Tip } from "./Tip";
+import { WinnerCrown } from "./WinnerCrown";
 
 function withAlpha(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -9,14 +10,25 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function PlayerLabel({ name, players }: { name: string; players: string[] }) {
+function PlayerLabel({
+  name,
+  players,
+  isWinner,
+  viewerColor,
+}: {
+  name: string;
+  players: string[];
+  isWinner?: boolean;
+  viewerColor?: ViewerColor | null;
+}) {
   return (
     <>
       <span
         className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
-        style={{ backgroundColor: categoricalColorForName(name, players) }}
+        style={{ backgroundColor: resolvePlayerColor(name, players, viewerColor) }}
       />
       {name}
+      {isWinner && <WinnerCrown className="ml-1" />}
     </>
   );
 }
@@ -31,10 +43,14 @@ export function MatrixTable({
   players,
   matrix,
   cellTip,
+  winnerName,
+  viewerColor,
 }: {
   players: string[];
   matrix: Record<string, Record<string, number>>;
   cellTip: (row: string, col: string, value: number) => string;
+  winnerName?: string | null;
+  viewerColor?: ViewerColor | null;
 }) {
   const max = Math.max(1, ...players.flatMap((row) => players.map((col) => matrix[row]?.[col] ?? 0)));
 
@@ -45,7 +61,7 @@ export function MatrixTable({
           <Th sticky />
           {players.map((p) => (
             <Th key={p} className="text-center">
-              <PlayerLabel name={p} players={players} />
+              <PlayerLabel name={p} players={players} isWinner={p === winnerName} viewerColor={viewerColor} />
             </Th>
           ))}
         </tr>
@@ -54,7 +70,7 @@ export function MatrixTable({
         {players.map((row) => (
           <tr key={row}>
             <Td sticky>
-              <PlayerLabel name={row} players={players} />
+              <PlayerLabel name={row} players={players} isWinner={row === winnerName} viewerColor={viewerColor} />
             </Td>
             {players.map((col) => {
               if (row === col) {

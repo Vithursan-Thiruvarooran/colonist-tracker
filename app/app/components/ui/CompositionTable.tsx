@@ -1,6 +1,7 @@
 import { categoricalColor } from "../../lib/chartTheme";
 import { Table, Td, Th } from "./Table";
 import { Tip } from "./Tip";
+import { WinnerCrown } from "./WinnerCrown";
 
 export interface CompositionSource {
   key: string;
@@ -16,6 +17,7 @@ export interface CompositionRow {
   /** Overrides the sum of `values` for the Total column (e.g. a
    * final-score field that should win over recomputing it from sources). */
   total?: number;
+  isWinner?: boolean;
 }
 
 /** Table form of a part-to-whole breakdown per player -- the tabular
@@ -59,7 +61,10 @@ export function CompositionTable({
           const total = row.total ?? sum;
           return (
             <tr key={row.key}>
-              <Td sticky>{row.name}</Td>
+              <Td sticky>
+                {row.name}
+                {row.isWinner && <WinnerCrown className="ml-1" />}
+              </Td>
               {sources.map((s) => (
                 <Td key={s.key} className="tabular-nums">
                   {row.values[s.key] ?? 0}

@@ -9,8 +9,13 @@
 @theme {
   --color-ocean: #0f2e3d;
   --color-ocean-deep: #0a2029;
-  --color-parchment: #efe7d8;
-  --color-parchment-dim: #e2d8c4;
+  --color-parchment: #e2d4ba;
+  --color-parchment-dim: #d5c5a6;
+  /* The form-field fill (Input/Select/Textarea, always at /60 over
+     whatever surface it sits on) -- a soft off-white instead of stark
+     white, so a field reads as part of this palette rather than a generic
+     browser-default white sitting on top of it. */
+  --color-paper: #f4efe2;
   --color-ink: #2b2118;
   --color-ink-dim: #6b5e4d;
   --color-brick: #ad4e2e;

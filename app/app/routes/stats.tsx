@@ -5,11 +5,14 @@ import { DiceRollChart } from "../components/charts/DiceRollChart";
 import { PlayerScatterChart } from "../components/charts/PlayerScatterChart";
 import { RankedBarChart, type RankedBarRow } from "../components/charts/RankedBarChart";
 import { TimeSeriesLineChart, type TimeSeriesPoint } from "../components/charts/TimeSeriesLineChart";
+import { Button } from "../components/ui/Button";
 import { Panel } from "../components/ui/Panel";
+import { Select } from "../components/ui/Input";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
 import { Tip } from "../components/ui/Tip";
 import { SEQUENTIAL_HUE } from "../lib/chartTheme";
+import { formatShortDate } from "../lib/format";
 import {
   getPlayerGameRows,
   getPlayerStats,
@@ -47,9 +50,44 @@ function formatVp(value: number): string {
   return value.toFixed(1);
 }
 
-function shortDate(iso: string | null): string {
-  if (!iso) return "?";
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+/** The three per-observation correlation charts shared by the aggregate and
+ * by-player views -- same shape, just fed the full row set or one player's
+ * subset. */
+function buildCorrelations(rows: PlayerGameRow[]) {
+  const pipsVsVp: CorrelationPoint[] = rows
+    .filter((r): r is PlayerGameRow & { starting_placement_pips: number; final_victory_points: number } =>
+      r.starting_placement_pips != null && r.final_victory_points != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.starting_placement_pips, y: r.final_victory_points }));
+
+  const devCardsVsRobbing: CorrelationPoint[] = rows
+    .filter((r): r is PlayerGameRow & { dev_cards_used: number; robbing_income: number } =>
+      r.dev_cards_used != null && r.robbing_income != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.dev_cards_used, y: r.robbing_income }));
+
+  const tradesProposedVsSuccessful: CorrelationPoint[] = rows
+    .filter((r): r is PlayerGameRow & { proposed_trades: number; successful_trades: number } =>
+      r.proposed_trades != null && r.successful_trades != null
+    )
+    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.proposed_trades, y: r.successful_trades }));
+
+  return { pipsVsVp, devCardsVsRobbing, tradesProposedVsSuccessful };
+}
+
+/** Win rate for each side of a boolean split (e.g. held Largest Army or
+ * not) -- fixed "Held" / "Didn't hold" order so the two bars are always
+ * directly comparable, rather than reshuffling by whichever won more. */
+function heldWinRateRows(rows: PlayerGameRow[], heldFn: (row: PlayerGameRow) => boolean): RankedBarRow[] {
+  return (["Held", "Didn't hold"] as const).map((label) => {
+    const subset = rows.filter((r) => heldFn(r) === (label === "Held"));
+    const wins = subset.filter((r) => r.is_winner).length;
+    return {
+      name: `${label} (${subset.length})`,
+      value: subset.length ? Math.round((wins / subset.length) * 1000) / 10 : 0,
+      color: SEQUENTIAL_HUE,
+    };
+  });
 }
 
 export default function Stats() {
@@ -58,6 +96,8 @@ export default function Stats() {
   const [recentGames, setRecentGames] = useState<GameSummary[] | null>(null);
   const [playerGameRows, setPlayerGameRows] = useState<PlayerGameRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"aggregate" | "player">("aggregate");
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
 
   useEffect(() => {
     Promise.all([getPlayerStats(), getStatsOverview(), listGames({ limit: TREND_GAME_LIMIT }), getPlayerGameRows()])
@@ -103,34 +143,90 @@ export default function Stats() {
   const chronoGames = [...recentGames].reverse();
   const durationTrend: TimeSeriesPoint[] = chronoGames
     .filter((g) => g.duration_ms != null)
-    .map((g) => ({ label: shortDate(g.played_at), value: Math.round((g.duration_ms ?? 0) / 60000) }));
+    .map((g) => ({ label: formatShortDate(g.played_at), value: Math.round((g.duration_ms ?? 0) / 60000) }));
   const turnsTrend: TimeSeriesPoint[] = chronoGames
     .filter((g) => g.total_turns != null)
-    .map((g) => ({ label: shortDate(g.played_at), value: g.total_turns ?? 0 }));
+    .map((g) => ({ label: formatShortDate(g.played_at), value: g.total_turns ?? 0 }));
 
-  const pipsVsVp: CorrelationPoint[] = playerGameRows
-    .filter((r): r is PlayerGameRow & { starting_placement_pips: number; final_victory_points: number } =>
-      r.starting_placement_pips != null && r.final_victory_points != null
-    )
-    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.starting_placement_pips, y: r.final_victory_points }));
+  const { pipsVsVp, devCardsVsRobbing, tradesProposedVsSuccessful } = buildCorrelations(playerGameRows);
 
-  const devCardsVsRobbing: CorrelationPoint[] = playerGameRows
-    .filter((r): r is PlayerGameRow & { dev_cards_used: number; robbing_income: number } =>
-      r.dev_cards_used != null && r.robbing_income != null
-    )
-    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.dev_cards_used, y: r.robbing_income }));
+  // -- By-player view -------------------------------------------------
+  const selectedPlayer =
+    players.find((p) => (p.user_id ?? p.name) === selectedPlayerId) ?? players[0] ?? null;
+  const playerRows = selectedPlayer
+    ? playerGameRows.filter((r) => (r.user_id ?? r.name) === (selectedPlayer.user_id ?? selectedPlayer.name))
+    : [];
 
-  const tradesProposedVsSuccessful: CorrelationPoint[] = playerGameRows
-    .filter((r): r is PlayerGameRow & { proposed_trades: number; successful_trades: number } =>
-      r.proposed_trades != null && r.successful_trades != null
-    )
-    .map((r) => ({ name: r.name, detail: `game ${r.game_id}`, x: r.proposed_trades, y: r.successful_trades }));
+  const seatNumbers = [...new Set(playerRows.map((r) => r.play_order_position).filter((n): n is number => n != null))].sort(
+    (a, b) => a - b,
+  );
+  const seatWinRate: RankedBarRow[] = seatNumbers.map((seat) => {
+    const rows = playerRows.filter((r) => r.play_order_position === seat);
+    const wins = rows.filter((r) => r.is_winner).length;
+    return { name: `Seat ${seat} (${rows.length})`, value: Math.round((wins / rows.length) * 1000) / 10, color: SEQUENTIAL_HUE };
+  });
+  const seatAvgVp: RankedBarRow[] = seatNumbers.map((seat) => {
+    const rows = playerRows.filter((r) => r.play_order_position === seat && r.victory_point_percentage != null);
+    const avg = rows.length ? rows.reduce((sum, r) => sum + (r.victory_point_percentage ?? 0), 0) / rows.length : 0;
+    return { name: `Seat ${seat} (${rows.length})`, value: Math.round(avg * 10) / 10, color: SEQUENTIAL_HUE };
+  });
+  const largestArmyWinRate = heldWinRateRows(playerRows, (r) => r.held_largest_army);
+  const longestRoadWinRate = heldWinRateRows(playerRows, (r) => r.held_longest_road);
+
+  const playerCorrelations = buildCorrelations(playerRows);
+
+  // playerGameRows has no natural order; play_order/rows aren't date-sorted
+  // either, so reuse played_at the same way chronoGames does for the
+  // aggregate trend charts.
+  const chronoPlayerRows = [...playerRows].sort((a, b) => (a.played_at ?? "").localeCompare(b.played_at ?? ""));
+  const vpPercentTrend: TimeSeriesPoint[] = chronoPlayerRows
+    .filter((r): r is PlayerGameRow & { victory_point_percentage: number } => r.victory_point_percentage != null)
+    .map((r) => ({ label: formatShortDate(r.played_at), value: Math.round(r.victory_point_percentage) }));
+
+  const rowsWithVpPercent = playerRows.filter((r) => r.victory_point_percentage != null);
+  const avgVpPercent = rowsWithVpPercent.length
+    ? rowsWithVpPercent.reduce((sum, r) => sum + (r.victory_point_percentage ?? 0), 0) / rowsWithVpPercent.length
+    : null;
 
   return (
     <div>
       <h1 className="mb-1 font-display text-2xl font-medium text-parchment">Stats</h1>
-      <p className="mb-5 text-sm text-seafoam-dim">Aggregated across every game ingested from colonist.io.</p>
+      <p className="mb-5 text-sm text-seafoam-dim">
+        {view === "aggregate"
+          ? "Aggregated across every game ingested from colonist.io."
+          : "One player's games in isolation -- what tends to correlate with their wins specifically."}
+      </p>
 
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="flex gap-1.5">
+          <Button
+            variant={view === "aggregate" ? "primary" : "outline"}
+            onClick={() => setView("aggregate")}
+          >
+            All players
+          </Button>
+          <Button variant={view === "player" ? "primary" : "outline"} onClick={() => setView("player")}>
+            By player
+          </Button>
+        </div>
+        {view === "player" && (
+          <Select
+            value={selectedPlayer ? (selectedPlayer.user_id ?? selectedPlayer.name) : ""}
+            onChange={(e) => setSelectedPlayerId(e.target.value)}
+            className="max-w-xs"
+          >
+            {players.map((p) => (
+              <option key={p.user_id ?? p.name} value={p.user_id ?? p.name}>
+                {p.name}
+                {p.is_bot ? " (bot)" : ""} — {p.games_played} game{p.games_played === 1 ? "" : "s"}
+              </option>
+            ))}
+          </Select>
+        )}
+      </div>
+
+      {view === "aggregate" && (
+        <>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Total games"
@@ -222,7 +318,7 @@ export default function Stats() {
             formatY={(v) => v.toFixed(0)}
           />
         </Panel>
-        <Panel>
+        <Panel className="lg:col-span-2">
           <h3 className="mb-1 text-sm font-medium text-ink-dim">Trades proposed vs. successful</h3>
           <p className="mb-3 text-xs text-ink-dim">How much proposing actually converts, across every game.</p>
           <CorrelationScatterChart
@@ -302,6 +398,110 @@ export default function Stats() {
           </tbody>
         </Table>
       </Panel>
+        </>
+      )}
+
+      {view === "player" && selectedPlayer && (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile label="Games" value={String(selectedPlayer.games_played)} />
+            <StatTile label="Wins" value={String(selectedPlayer.wins)} />
+            <StatTile label="Win rate" value={formatPercent(selectedPlayer.win_rate * 100)} />
+            <StatTile
+              label="Avg VP"
+              value={selectedPlayer.avg_final_victory_points != null ? formatVp(selectedPlayer.avg_final_victory_points) : "—"}
+              tip={avgVpPercent != null ? `${avgVpPercent.toFixed(0)}% of victory points needed to win, on average` : undefined}
+            />
+          </div>
+
+          {playerRows.length > 0 && (
+            <>
+              <SectionHeader
+                title="What correlates with a win"
+                caption={`Across ${playerRows.length} game${playerRows.length === 1 ? "" : "s"} — win rate split by turn order and by holding the two bonus achievements.`}
+              />
+              <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {seatWinRate.length > 1 && (
+                  <Panel>
+                    <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate by turn order</h3>
+                    <p className="mb-3 text-xs text-ink-dim">Seat 1 acts first each round; higher seats act later.</p>
+                    <RankedBarChart data={seatWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+                  </Panel>
+                )}
+                {seatAvgVp.length > 1 && (
+                  <Panel>
+                    <h3 className="mb-1 text-sm font-medium text-ink-dim">Avg VP% by turn order</h3>
+                    <p className="mb-3 text-xs text-ink-dim">Final victory points as a share of what's needed to win.</p>
+                    <RankedBarChart data={seatAvgVp} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+                  </Panel>
+                )}
+                <Panel>
+                  <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate: Largest Army</h3>
+                  <RankedBarChart data={largestArmyWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+                </Panel>
+                <Panel>
+                  <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate: Longest Road</h3>
+                  <RankedBarChart data={longestRoadWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+                </Panel>
+              </div>
+            </>
+          )}
+
+          {vpPercentTrend.length > 1 && (
+            <>
+              <SectionHeader title="VP% trend" caption="Final victory points as a share of the win target, one game after another." />
+              <Panel className="mb-6">
+                <TimeSeriesLineChart data={vpPercentTrend} formatValue={formatPercent} />
+              </Panel>
+            </>
+          )}
+
+          <SectionHeader
+            title="Correlations, this player only"
+            caption="Same comparisons as the all-players view, scoped to just their games."
+          />
+          <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {playerCorrelations.pipsVsVp.length > 1 && (
+              <Panel>
+                <h3 className="mb-1 text-sm font-medium text-ink-dim">Starting placement pips vs. final score</h3>
+                <CorrelationScatterChart
+                  data={playerCorrelations.pipsVsVp}
+                  xLabel="Starting pips"
+                  yLabel="Final VP"
+                  formatX={(v) => v.toFixed(0)}
+                  formatY={(v) => v.toFixed(0)}
+                />
+              </Panel>
+            )}
+            {playerCorrelations.devCardsVsRobbing.length > 1 && (
+              <Panel>
+                <h3 className="mb-1 text-sm font-medium text-ink-dim">Dev cards used vs. robbing income</h3>
+                <CorrelationScatterChart
+                  data={playerCorrelations.devCardsVsRobbing}
+                  xLabel="Dev cards used"
+                  yLabel="Robbing income"
+                  formatX={(v) => v.toFixed(0)}
+                  formatY={(v) => v.toFixed(0)}
+                />
+              </Panel>
+            )}
+            {playerCorrelations.tradesProposedVsSuccessful.length > 1 && (
+              <Panel className="lg:col-span-2">
+                <h3 className="mb-1 text-sm font-medium text-ink-dim">Trades proposed vs. successful</h3>
+                <CorrelationScatterChart
+                  data={playerCorrelations.tradesProposedVsSuccessful}
+                  xLabel="Proposed"
+                  yLabel="Successful"
+                  formatX={(v) => v.toFixed(0)}
+                  formatY={(v) => v.toFixed(0)}
+                />
+              </Panel>
+            )}
+          </div>
+
+          {playerRows.length === 0 && <p className="text-sm text-seafoam-dim">No games found for this player.</p>}
+        </>
+      )}
     </div>
   );
 }

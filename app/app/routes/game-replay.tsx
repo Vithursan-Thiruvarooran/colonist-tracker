@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { EventLogList } from "../components/ui/EventLogList";
 import { Panel, RawPanel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
+import { useViewerColor } from "../hooks/useViewerColor";
 import { boardAtStep } from "../lib/timelineFold";
 import { getGameTimeline, type GameTimeline } from "../services/games";
 
@@ -19,6 +20,7 @@ export default function GameReplay() {
   const [stepIndex, setStepIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const logRef = useRef<HTMLUListElement>(null);
+  const viewerColor = useViewerColor();
 
   useEffect(() => {
     if (!gameId) return;
@@ -139,7 +141,7 @@ export default function GameReplay() {
 
       <SectionHeader title="Board" caption="The board exactly as it stood at this step." />
       <Panel className="mb-6">
-        <CatanBoard board={board} players={players} />
+        <CatanBoard board={board} players={players} viewerColor={viewerColor} />
       </Panel>
 
       <SectionHeader title="Log" caption="Every move up to this step." />

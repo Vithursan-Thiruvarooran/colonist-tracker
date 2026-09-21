@@ -35,6 +35,10 @@ class PlayerBrief(BaseModel):
     is_winner: bool
     rank: Optional[int] = None
     final_victory_points: Optional[int] = None
+    victory_point_percentage: Optional[float] = None
+    play_order_position: Optional[int] = None
+    held_largest_army: bool = False
+    held_longest_road: bool = False
     starting_placement_pips: Optional[int] = None
     starting_placement_resource_diversity: Optional[int] = None
     starting_placement_resources: Dict[str, int] = Field(default_factory=dict)
@@ -47,6 +51,8 @@ class PlayerGameStats(PlayerBrief):
     resource_stats: Dict[str, Any] = Field(default_factory=dict)
     activity_stats: Dict[str, Any] = Field(default_factory=dict)
     dev_cards: Dict[str, int] = Field(default_factory=dict)
+    trading: Dict[str, Any] = Field(default_factory=dict)
+    robber: Dict[str, Any] = Field(default_factory=dict)
 
 
 class GameSummary(BaseModel):
@@ -167,6 +173,35 @@ class GameTimeline(BaseModel):
     steps: List[TimelineStep] = Field(default_factory=list)
 
 
+class TradeRecord(BaseModel):
+    """One completed trade -- player-to-player or with the bank/a port.
+    player_b is None for a bank/port trade (see decode_game.py's trades())."""
+
+    turn: int
+    trade_type: Literal["player", "bank", "port"]
+    player_a: Optional[str] = None
+    player_b: Optional[str] = None
+    given: Dict[str, int] = Field(default_factory=dict)
+    received: Dict[str, int] = Field(default_factory=dict)
+
+
+class RobberMove(BaseModel):
+    """One robber placement. card_stolen/target_player are only known when
+    the log reveals them (see decode_game.py's robber_moves_and_stats() for
+    the privacy caveat on card_stolen)."""
+
+    turn: int
+    player: Optional[str] = None
+    from_tile_index: Optional[int] = None
+    to_tile_index: int
+    to_terrain: str
+    to_resource: Optional[str] = None
+    players_on_tile: List[str] = Field(default_factory=list)
+    target_player: Optional[str] = None
+    card_stolen: Optional[str] = None
+    turns_blocked: Optional[int] = None
+
+
 class GameDetail(BaseModel):
     game_id: str
     played_at: Optional[datetime] = None
@@ -186,6 +221,10 @@ class GameDetail(BaseModel):
     robbery_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     trade_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     rejected_trade_matrix: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+    trades: List[TradeRecord] = Field(default_factory=list)
+    trading_stats: Dict[str, Any] = Field(default_factory=dict)
+    robber_moves: List[RobberMove] = Field(default_factory=list)
+    robber_stats: Dict[str, Any] = Field(default_factory=dict)
     log: List[LogEntry] = Field(default_factory=list)
 
 
@@ -220,6 +259,10 @@ class PlayerGameRow(BaseModel):
     user_id: Optional[str] = None
     rank: Optional[int] = None
     final_victory_points: Optional[int] = None
+    victory_point_percentage: Optional[float] = None
+    play_order_position: Optional[int] = None
+    held_largest_army: bool = False
+    held_longest_road: bool = False
     is_winner: bool
     starting_placement_pips: Optional[int] = None
     starting_placement_resource_diversity: Optional[int] = None

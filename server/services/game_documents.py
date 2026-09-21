@@ -37,6 +37,8 @@ def build_game_document(raw: dict, source_username: str, player_color: Optional[
         "resource_stats": decoded.get("resource_stats_by_player", {}),
         "activity_stats": decoded.get("activity_stats_by_player", {}),
         "dev_cards": decoded.get("dev_cards_by_player", {}),
+        "trading": decoded.get("trading_stats_by_player", {}),
+        "robber": decoded.get("robber_stats_by_player", {}),
     }
     # starting_placements is flattened directly onto the player (multiple
     # top-level fields, e.g. starting_placement_pips), not nested under one
@@ -75,6 +77,10 @@ def build_game_document(raw: dict, source_username: str, player_color: Optional[
         "robbery_matrix": decoded.get("robbery_matrix", {}),
         "trade_matrix": decoded.get("trade_matrix", {}),
         "rejected_trade_matrix": decoded.get("rejected_trade_matrix", {}),
+        "trades": decoded.get("trades", []),
+        "trading_stats": decoded.get("trading_stats", {}),
+        "robber_moves": decoded.get("robber_moves", []),
+        "robber_stats": decoded.get("robber_stats", {}),
         "log": [
             {"index": entry["index"], "type": entry["type"], "player": entry["player"], "text": entry["text"]}
             for entry in decoded.get("log", [])

@@ -80,12 +80,12 @@ export default function Auth() {
       </h1>
 
       <Panel>
-        <div className="mb-4 flex gap-1 rounded-md bg-black/20 p-1">
+        <div className="mb-4 flex gap-1 rounded-md bg-ink/10 p-1">
           <button
             type="button"
             onClick={() => switchMode("login")}
             className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-              mode === "login" ? "bg-white/10 text-parchment" : "text-ink-dim hover:text-parchment"
+              mode === "login" ? "bg-parchment text-ink shadow-sm" : "text-ink-dim hover:text-ink"
             }`}
           >
             Log in
@@ -94,7 +94,7 @@ export default function Auth() {
             type="button"
             onClick={() => switchMode("signup")}
             className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-              mode === "signup" ? "bg-white/10 text-parchment" : "text-ink-dim hover:text-parchment"
+              mode === "signup" ? "bg-parchment text-ink shadow-sm" : "text-ink-dim hover:text-ink"
             }`}
           >
             Sign up

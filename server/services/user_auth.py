@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from server import config
+from server.models.user import DEFAULT_PLAYER_COLOR
 from server.services.player_registry import find_player_by_username
 
 _PBKDF2_ITERATIONS = 200_000
@@ -64,6 +65,7 @@ async def signup(db: AsyncIOMotorDatabase, email: str, username: str, password: 
         "is_admin": is_admin,
         "created_at": now,
         "decided_at": now if is_admin else None,
+        "color": DEFAULT_PLAYER_COLOR,
     }
     await db.users.insert_one(doc)
     return doc
@@ -87,6 +89,7 @@ async def update_profile(
     email: Optional[str] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    color: Optional[str] = None,
 ) -> Dict[str, Any]:
     user = await db.users.find_one({"user_id": user_id})
     if user is None:
@@ -113,6 +116,9 @@ async def update_profile(
 
     if password is not None:
         update.update(_new_password_hash(password))
+
+    if color is not None:
+        update["color"] = color
 
     if update:
         await db.users.update_one({"user_id": user_id}, {"$set": update})

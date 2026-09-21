@@ -17,6 +17,12 @@ _LIST_VIEW_EXCLUDED_FIELDS = {
     "players.resource_stats": 0,
     "players.activity_stats": 0,
     "players.victory_points_by_source": 0,
+    "players.trading": 0,
+    "players.robber": 0,
+    "trades": 0,
+    "trading_stats": 0,
+    "robber_moves": 0,
+    "robber_stats": 0,
 }
 
 
@@ -110,6 +116,10 @@ async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
                 "user_id": "$players.user_id",
                 "rank": "$players.rank",
                 "final_victory_points": "$players.final_victory_points",
+                "victory_point_percentage": "$players.victory_point_percentage",
+                "play_order_position": "$players.play_order_position",
+                "held_largest_army": "$players.held_largest_army",
+                "held_longest_road": "$players.held_longest_road",
                 "is_winner": "$players.is_winner",
                 "starting_placement_pips": "$players.starting_placement_pips",
                 "starting_placement_resource_diversity": "$players.starting_placement_resource_diversity",

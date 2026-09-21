@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
+import { AuthGate } from "../components/ui/AuthGate";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { Table, Td, Th } from "../components/ui/Table";
+import { useAuthGate } from "../hooks/useAuthGate";
+import { formatDateTime } from "../lib/format";
 import {
   approveUser,
   getIngestToken,
@@ -16,24 +19,12 @@ import {
   type AdminUserRow,
   type ApiToken,
 } from "../services/admin";
-import { fetchMe, isLoggedIn } from "../services/auth";
 import { listGames, type GameSummary } from "../services/games";
 
 const RECENT_INGESTS_LIMIT = 8;
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default function Admin() {
-  const [status, setStatus] = useState<"loading" | "unauthorized" | "forbidden" | "ready">("loading");
+  const { status } = useAuthGate({ requireAdmin: true });
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [actioning, setActioning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,33 +34,19 @@ export default function Admin() {
   const [recentIngests, setRecentIngests] = useState<GameSummary[]>([]);
 
   useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    if (!isLoggedIn()) {
-      setStatus("unauthorized");
-      return;
-    }
-    try {
-      const me = await fetchMe();
-      if (!me.is_admin) {
-        setStatus("forbidden");
-        return;
-      }
-      const [pendingUsers, token, ingests] = await Promise.all([
-        listPendingUsers(),
-        getIngestToken(),
-        listGames({ limit: RECENT_INGESTS_LIMIT, sortBy: "fetched_at" }),
-      ]);
-      setUsers(pendingUsers);
-      setIngestToken(token);
-      setRecentIngests(ingests);
-      setStatus("ready");
-    } catch {
-      setStatus("unauthorized");
-    }
-  }
+    if (status !== "ready") return;
+    Promise.all([
+      listPendingUsers(),
+      getIngestToken(),
+      listGames({ limit: RECENT_INGESTS_LIMIT, sortBy: "fetched_at" }),
+    ])
+      .then(([pendingUsers, token, ingests]) => {
+        setUsers(pendingUsers);
+        setIngestToken(token);
+        setRecentIngests(ingests);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load admin data"));
+  }, [status]);
 
   async function handleRegenerateToken() {
     setTokenLoading(true);
@@ -109,28 +86,15 @@ export default function Admin() {
 
   if (status === "loading") return <p className="text-sm text-seafoam-dim">Loading…</p>;
 
-  if (status === "unauthorized") {
+  if (status === "unauthorized" || status === "forbidden") {
     return (
-      <div>
-        <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Admin</h1>
-        <Panel className="max-w-md">
-          <p className="text-sm text-ink-dim">You need to be logged in to an admin account to view this page.</p>
-          <Link to="/login?next=/admin">
-            <Button className="mt-4">Log in</Button>
-          </Link>
-        </Panel>
-      </div>
-    );
-  }
-
-  if (status === "forbidden") {
-    return (
-      <div>
-        <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Admin</h1>
-        <Panel className="max-w-md">
-          <p className="text-sm text-ink-dim">Your account doesn't have admin access.</p>
-        </Panel>
-      </div>
+      <AuthGate
+        status={status}
+        title="Admin"
+        next="/admin"
+        unauthorizedMessage="You need to be logged in to an admin account to view this page."
+        forbiddenMessage="Your account doesn't have admin access."
+      />
     );
   }
 
@@ -190,7 +154,7 @@ export default function Admin() {
                       {g.game_id}
                     </Link>
                   </Td>
-                  <Td>{formatDate(g.fetched_at)}</Td>
+                  <Td>{formatDateTime(g.fetched_at)}</Td>
                   <Td>{g.source_username ?? "—"}</Td>
                   <Td>{g.winner ? g.winner.name : "—"}</Td>
                 </tr>

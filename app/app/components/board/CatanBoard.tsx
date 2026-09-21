@@ -1,5 +1,5 @@
 import { boardViewBox, cornerPosition, edgeSegment, layoutHexes, portPosition } from "../../lib/boardGeometry";
-import { categoricalColorForName } from "../../lib/chartTheme";
+import { resolvePlayerColor, type ViewerColor } from "../../lib/chartTheme";
 import type { Board } from "../../services/games";
 
 // Thematic terrain colors -- this is an illustrative board, not a data
@@ -28,7 +28,15 @@ const PORT_OUTSET = 1.34;
 /** The physical Catan board -- terrain, dice numbers, the robber, every
  * settlement/city/road, and every port, laid out from the raw payload's real
  * coordinates (see boardGeometry.ts for what's confirmed and how). */
-export function CatanBoard({ board, players }: { board: Board; players: string[] }) {
+export function CatanBoard({
+  board,
+  players,
+  viewerColor,
+}: {
+  board: Board;
+  players: string[];
+  viewerColor?: ViewerColor | null;
+}) {
   const hexes = layoutHexes(board.hexes);
   const robberHex = hexes.find((h) => h.index === board.robber_tile_index);
 
@@ -128,7 +136,7 @@ export function CatanBoard({ board, players }: { board: Board; players: string[]
               y1={y1 * HEX_SCALE}
               x2={x2 * HEX_SCALE}
               y2={y2 * HEX_SCALE}
-              stroke={categoricalColorForName(edge.owner!, players)}
+              stroke={resolvePlayerColor(edge.owner!, players, viewerColor)}
               strokeWidth={6}
               strokeLinecap="round"
             />
@@ -139,7 +147,7 @@ export function CatanBoard({ board, players }: { board: Board; players: string[]
           const pos = cornerPixels.get(corner.index);
           if (!pos) return null;
           const [x, y] = [pos[0] * HEX_SCALE, pos[1] * HEX_SCALE];
-          const color = categoricalColorForName(corner.owner!, players);
+          const color = resolvePlayerColor(corner.owner!, players, viewerColor);
           return corner.building_type === "city" ? (
             <rect
               key={corner.index}
@@ -174,7 +182,7 @@ export function CatanBoard({ board, players }: { board: Board; players: string[]
             <span key={name} className="inline-flex items-center gap-1.5">
               <span
                 className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: categoricalColorForName(name, players) }}
+                style={{ backgroundColor: resolvePlayerColor(name, players, viewerColor) }}
               />
               {name}
             </span>

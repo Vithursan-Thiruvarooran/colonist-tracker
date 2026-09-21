@@ -61,3 +61,24 @@ export function categoricalColorForName(name: string, allNames: string[]): strin
   const index = sorted.indexOf(name);
   return categoricalColor(index < 0 ? 0 : index);
 }
+
+export interface ViewerColor {
+  /** The logged-in viewer's own colonist.io username -- matched
+   * case-insensitively against a rendered player name, the same casing
+   * tolerance the backend's own username linking uses. */
+  name: string;
+  color: string;
+}
+
+/** categoricalColorForName, except the logged-in viewer sees their own name
+ * in the color they picked on their profile (default black) instead of the
+ * auto-assigned categorical slot -- everyone else's colors are untouched.
+ * Kept separate from categoricalColorForName itself so that function stays
+ * pure and auth-agnostic; callers that don't know about the viewer (or
+ * aren't logged in) can keep calling it directly. */
+export function resolvePlayerColor(name: string, allNames: string[], viewer?: ViewerColor | null): string {
+  if (viewer && name.toLowerCase() === viewer.name.toLowerCase()) {
+    return viewer.color;
+  }
+  return categoricalColorForName(name, allNames);
+}

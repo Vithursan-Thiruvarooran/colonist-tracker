@@ -51,6 +51,7 @@ npm run dev   # http://localhost:5173
 
 ## Extractor Notes
 
+- `stats.md` (repo root) documents how every stat -- per-player, per-game, and cross-game -- is calculated and exactly where in the code it comes from. Update it in the same change whenever a stat is added, renamed, or its calculation changes; don't let it drift from `decode_game.py`/`game_documents.py`/`game_queries.py`/`stats.tsx`.
 - Input is a finished colonist.io game's raw replay data, from colonist.io's internal replay API — obtained via a manually-pasted payload or the Chrome extension's capture (Phase 4), not a saved HTML file or live scrape.
 - `server/extractor/decode_game.py` turns that raw API JSON into human-readable structured data, using `IntEnum`s (resource/piece/achievement/dev-card codes, message types) reverse-engineered and cross-validated against real games — see each enum's docstring for what's confirmed vs. still unknown.
 - `decode()` is a plain function independent of its CLI `main()` — `server/services/` imports and calls it directly rather than shelling out or duplicating logic.
@@ -58,6 +59,7 @@ npm run dev   # http://localhost:5173
 
 ## Storage (Phase 2) — `server/`
 
+- `api.md` (repo root) documents every backend endpoint -- auth tier, request/response shape, and the non-obvious behavior (idempotency, side effects, why a given status code) that the auto-generated `/docs` schema alone doesn't capture. Update it in the same change whenever a route in `server/routes/*.py` is added, removed, or its behavior changes; don't let it drift.
 - MongoDB via async `motor`, connection managed via FastAPI's lifespan (`server/db/__init__.py`'s `connect_to_mongo()`/`close_mongo_connection()`/`get_db()`), matching the `scrabble-score-tracker` pattern.
 - `server/config.py` loads `server/.env` — `MONGODB_URI`, `MONGODB_DB`, `SECRET_KEY`, `ADMIN_EMAIL`, `CORS_ALLOWED_ORIGINS`.
 - `POST /api/games/ingest` (stores a manually-pasted or extension-captured raw payload) lives in `server/routes/games.py` and `server/services/game_ingest.py`. Games already present (by `game_id`, a unique index) are skipped — safe to re-submit. `GET /api/games`, `GET /api/games/{game_id}`, and `server/routes/stats.py`'s endpoints serve the dashboard's read side.
@@ -68,7 +70,7 @@ npm run dev   # http://localhost:5173
 
 ## Auth
 
-- One login: email/username/password app accounts (`server/models/user.py`, `server/services/user_auth.py`) -- no separate shared-password gate. `POST /api/users/signup` and `POST /api/users/login` (`server/routes/users.py`) handle signup/login; signup links the account to an existing `players` doc by matching `username` case-insensitively (`server/services/player_registry.find_player_by_username`), re-checked on every admin approval (`relink_users_to_players`) and on profile edits that change the username.
+- One login: email/username/password app accounts (`server/models/user.py`, `server/services/user_auth.py`) -- no separate shared-password gate. `POST /api/users/signup` and `POST /api/users/login` (`server/routes/users.py`) handle signup/login; signup links the account to an existing `players` doc by matching `username` case-insensitively (`server/services/player_registry.find_player_by_username`), re-checked per-user on admin approval and on profile edits that change the username. Separately, `relink_users_to_players` does a bulk sweep of every still-unlinked user after each game ingest, since a new game can bring in a `players` doc that lets a previously-unmatched signup finally link.
 - New accounts are `pending` until an admin approves them via `POST /api/admin/users/{user_id}/{approve,reject}` (`server/routes/admin.py`), except the account whose email matches `ADMIN_EMAIL` (`server/.env`), which self-approves and gets `is_admin=true` on signup -- solves bootstrapping the first admin.
 - `is_admin` gates all data mutation: `require_admin` (`server/services/auth.py`) is required by every `/api/admin/*` route. `POST /api/games/ingest` uses `require_admin_or_ingest_token` instead, since the Chrome extension can't do an interactive login -- it accepts either a logged-in admin's bearer token or the single shared ingest API token (`server/services/api_tokens.py`, an `api_tokens` singleton doc), which only an admin can view or regenerate (`GET`/`POST /api/admin/ingest-token*`).
 - All bearer tokens are signed, 7-day tokens (`server/services/auth.py`); the signing key is `SECRET_KEY` (`server/.env`), independent of any user's password.

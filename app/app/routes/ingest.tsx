@@ -1,35 +1,18 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useState } from "react";
 
+import { AuthGate } from "../components/ui/AuthGate";
 import { Button } from "../components/ui/Button";
 import { Textarea } from "../components/ui/Input";
 import { Panel } from "../components/ui/Panel";
-import { fetchMe, isLoggedIn } from "../services/auth";
+import { useAuthGate } from "../hooks/useAuthGate";
 import { ingestGame, type FetchResult } from "../services/games";
 
 export default function Ingest() {
-  const [status, setStatus] = useState<"loading" | "unauthorized" | "forbidden" | "ready">("loading");
+  const { status } = useAuthGate({ requireAdmin: true });
   const [pastedJson, setPastedJson] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FetchResult | null>(null);
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function load() {
-    if (!isLoggedIn()) {
-      setStatus("unauthorized");
-      return;
-    }
-    try {
-      const me = await fetchMe();
-      setStatus(me.is_admin ? "ready" : "forbidden");
-    } catch {
-      setStatus("unauthorized");
-    }
-  }
 
   async function handleIngest() {
     setLoading(true);
@@ -51,30 +34,16 @@ export default function Ingest() {
 
   if (status === "loading") return <p className="text-sm text-seafoam-dim">Loading…</p>;
 
-  if (status === "unauthorized") {
+  if (status === "unauthorized" || status === "forbidden") {
     return (
-      <div>
-        <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Ingest a replay</h1>
-        <Panel className="max-w-md">
-          <p className="text-sm text-ink-dim">
-            Ingesting a replay changes stored data, so it's gated behind an admin login.
-          </p>
-          <Link to="/login?next=/ingest">
-            <Button className="mt-4">Log in to continue</Button>
-          </Link>
-        </Panel>
-      </div>
-    );
-  }
-
-  if (status === "forbidden") {
-    return (
-      <div>
-        <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Ingest a replay</h1>
-        <Panel className="max-w-md">
-          <p className="text-sm text-ink-dim">Only admin accounts can ingest replays.</p>
-        </Panel>
-      </div>
+      <AuthGate
+        status={status}
+        title="Ingest a replay"
+        next="/ingest"
+        unauthorizedMessage="Ingesting a replay changes stored data, so it's gated behind an admin login."
+        forbiddenMessage="Only admin accounts can ingest replays."
+        loginLabel="Log in to continue"
+      />
     );
   }
 
