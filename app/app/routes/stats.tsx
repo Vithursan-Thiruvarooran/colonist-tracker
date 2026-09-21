@@ -150,6 +150,17 @@ export default function Stats() {
 
   const { pipsVsVp, devCardsVsRobbing, tradesProposedVsSuccessful } = buildCorrelations(playerGameRows);
 
+  const allSeatNumbers = [
+    ...new Set(playerGameRows.map((r) => r.play_order_position).filter((n): n is number => n != null)),
+  ].sort((a, b) => a - b);
+  const allSeatWinRate: RankedBarRow[] = allSeatNumbers.map((seat) => {
+    const rows = playerGameRows.filter((r) => r.play_order_position === seat);
+    const wins = rows.filter((r) => r.is_winner).length;
+    return { name: `Seat ${seat} (${rows.length})`, value: Math.round((wins / rows.length) * 1000) / 10, color: SEQUENTIAL_HUE };
+  });
+  const allLargestArmyWinRate = heldWinRateRows(playerGameRows, (r) => r.held_largest_army);
+  const allLongestRoadWinRate = heldWinRateRows(playerGameRows, (r) => r.held_longest_road);
+
   // -- By-player view -------------------------------------------------
   const selectedPlayer =
     players.find((p) => (p.user_id ?? p.name) === selectedPlayerId) ?? players[0] ?? null;
@@ -285,6 +296,28 @@ export default function Stats() {
           />
         </Panel>
       )}
+
+      <SectionHeader
+        title="Seat & achievement effects"
+        caption="Win rate across every player-game observation, not per-player -- does seat order or a bonus achievement move the odds at all?"
+      />
+      <div className="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {allSeatWinRate.length > 1 && (
+          <Panel className="lg:col-span-2">
+            <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate by turn order</h3>
+            <p className="mb-3 text-xs text-ink-dim">Seat 1 acts first each round; higher seats act later.</p>
+            <RankedBarChart data={allSeatWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+          </Panel>
+        )}
+        <Panel>
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate: Largest Army</h3>
+          <RankedBarChart data={allLargestArmyWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+        </Panel>
+        <Panel>
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate: Longest Road</h3>
+          <RankedBarChart data={allLongestRoadWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+        </Panel>
+      </div>
 
       <SectionHeader
         title="Correlations across games"

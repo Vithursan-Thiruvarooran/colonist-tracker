@@ -231,6 +231,12 @@ Everything below is computed in the browser from `PlayerGameRow[]` /
   value, capped to the `MAX_RANKED_PLAYERS` (10) most-played.
 - Scoring efficiency scatter (avg VP vs. win rate, bubble size = games
   played).
+- Win rate by turn order (`play_order_position`), and win rate split by
+  `held_largest_army` / `held_longest_road` (`heldWinRateRows()`) -- same
+  grouping as the by-player view below, but over every `PlayerGameRow`
+  across every player and game, not filtered to one player. Answers "does
+  seat order / a bonus achievement move the odds at all" at the population
+  level, as opposed to the by-player view's "for this specific player."
 - Correlation scatters (`buildCorrelations()`): starting pips vs. final VP,
   dev cards used vs. robbing income, trades proposed vs. successful -- one
   point per `PlayerGameRow`.
