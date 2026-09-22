@@ -18,6 +18,24 @@ class FetchResult(BaseModel):
     reason: Optional[str] = None
 
 
+class RawGameExport(BaseModel):
+    """One `raw_games` document, verbatim -- the shape both `GET
+    /api/admin/export` produces and `POST /api/admin/import` consumes, so a
+    downloaded export can be re-uploaded unmodified."""
+
+    game_id: str
+    raw: Dict[str, Any]
+    source_username: Optional[str] = None
+    player_color: Optional[int] = None
+    fetched_at: Optional[datetime] = None
+
+
+class ImportResult(BaseModel):
+    stored: int
+    skipped: int
+    errors: List[str] = Field(default_factory=list)
+
+
 class WinnerInfo(BaseModel):
     user_id: Optional[str] = None
     name: str

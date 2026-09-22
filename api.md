@@ -186,6 +186,37 @@ Issues a new ingest token, immediately invalidating the old one (any
 Chrome extension still holding it starts getting 401s from
 `/api/games/ingest` until re-pasted). Response: `ApiTokenResponse`.
 
+### `GET /api/admin/export`
+Backup: dumps every `raw_games` document verbatim (`export_raw_games()`,
+`server/services/game_ingest.py`) -- `{game_id, raw, source_username,
+player_color, fetched_at}` per game, the same shape `POST
+/api/admin/import` consumes, so the download can be re-uploaded
+unmodified. `raw_games` alone is sufficient to rebuild `games` and
+`game_timelines` (see `server/scripts/rebuild_games.py` /
+`rebuild_timelines.py`), so this is a complete backup of the underlying
+data. Response: `List[RawGameExport]`.
+
+### `POST /api/admin/import`
+Restore: re-ingests games from a `GET /api/admin/export` download. Body:
+`List[RawGameExport]`, the export's own shape. Delegates to
+`import_raw_games()`, which, per entry:
+1. Skips it if a `raw_games` doc with that `game_id` already exists --
+   same idempotency as `POST /api/games/ingest`, so re-importing the same
+   backup (or one with overlapping games) is always safe.
+2. Otherwise decodes and upserts all three derived collections exactly
+   like a fresh ingest, **except** it preserves the entry's original
+   `source_username`/`player_color`/`fetched_at` instead of stamping them
+   as a new "manual" ingest happening now -- this is a restore, not a new
+   capture.
+3. A malformed entry (missing `raw`/`game_id`, or a decode failure) is
+   recorded in `errors` and skipped rather than aborting the whole
+   import, since one bad row in a large backup shouldn't block the rest.
+
+Response: `ImportResult` -- `{stored, skipped, errors: [str, ...]}`, all
+counts over the whole batch. Never returns a 400 for a per-entry problem;
+only a structurally invalid request body (fails `List[RawGameExport]`
+validation) does.
+
 ### `GET /api/admin/users`
 Lists signup accounts for the approval queue. Query param `status`
 (default `"pending"`) -- `"all"` returns every status. Response:
