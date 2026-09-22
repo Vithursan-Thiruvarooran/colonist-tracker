@@ -205,14 +205,15 @@ game -- `get_player_stats()` in `server/services/game_queries.py`, a Mongo
 
 One flat row per (game, player) observation, deliberately **not**
 aggregated -- `get_player_game_rows()`, a `$project` (no `$group`) so
-correlation charts get a real per-observation scatter. Every field is a
-straight pass-through of a `players.*` field already described above
-(`victory_point_percentage`, `play_order_position`, `held_largest_army`,
-`held_longest_road`, `starting_placement_pips`,
+correlation and win-rate-by-bucket charts get a real per-observation
+scatter/bucket. Every field is a straight pass-through of a `players.*`
+field already described above (`victory_point_percentage`,
+`play_order_position`, `held_largest_army`, `held_longest_road`,
+`victory_points_by_source`, `starting_placement_pips`,
 `starting_placement_resource_diversity`, `total_resource_income`,
 `robbing_income`, `trade_income`, `dev_card_income`, `proposed_trades`,
 `successful_trades`, `dev_cards_bought`, `dev_cards_used`,
-`knight_cards_played`).
+`knight_cards_played`, `production_lost_to_robber`).
 
 ### `StatsOverview` (`GET /api/stats/overview`)
 
@@ -231,15 +232,37 @@ Everything below is computed in the browser from `PlayerGameRow[]` /
   value, capped to the `MAX_RANKED_PLAYERS` (10) most-played.
 - Scoring efficiency scatter (avg VP vs. win rate, bubble size = games
   played).
-- Win rate by turn order (`play_order_position`), and win rate split by
-  `held_largest_army` / `held_longest_road` (`heldWinRateRows()`) -- same
-  grouping as the by-player view below, but over every `PlayerGameRow`
+- Avg victory points by source, per player (`StackedCompositionChart`) --
+  same ranked/capped roster as the avg VP bar, but each player's average
+  `victory_points_by_source` (see the per-player table above) averaged
+  independently per source across their games and stacked, using the same
+  `VP_SOURCES` key/label/order as `game-detail.tsx`'s per-game breakdown.
+  Shows *how* a player tends to reach their score (settlements-heavy vs.
+  leaning on Largest Army, say), not just the final total.
+- Win rate by turn order (`play_order_position`), win rate split by
+  `held_largest_army` / `held_longest_road` (`heldWinRateRows()`), and win
+  rate by trade income and by production lost to the robber
+  (`bucketedWinRateRows()`, `trade_income` / `production_lost_to_robber`
+  each bucketed into quartiles by their own distribution -- not fixed
+  thresholds, so the buckets stay meaningful as more games get ingested) --
+  same grouping as the by-player view below, but over every `PlayerGameRow`
   across every player and game, not filtered to one player. Answers "does
-  seat order / a bonus achievement move the odds at all" at the population
-  level, as opposed to the by-player view's "for this specific player."
-- Correlation scatters (`buildCorrelations()`): starting pips vs. final VP,
-  dev cards used vs. robbing income, trades proposed vs. successful -- one
-  point per `PlayerGameRow`.
+  seat order, a bonus achievement, trading, or the robber move the odds at
+  all" at the population level, as opposed to the by-player view's "for
+  this specific player."
+- Win rate by starting resource diversity (`starting_placement_resource_
+  diversity`) -- one bar per observed distinct-resource count (3/4/5), same
+  exact-value grouping as the seat chart, since the range is small enough
+  that quartile bucketing would just be less readable.
+- Win rate by knights played, bucketed `0` / `1` / `2` / `3+` (the last
+  bucket merges the long tail of 3-6 knights into one bar, and is the
+  natural cut point since Largest Army requires a minimum of 3). Paired
+  with a second chart, **Largest Army payoff among 3+-knight games**
+  (`heldWinRateRows()` restricted to `knight_cards_played >= 3`), which
+  isolates actually winning the Largest Army race from merely playing
+  enough knights to be in contention for it.
+- Correlation scatter (`buildCorrelations()`): starting pips vs. final VP --
+  one point per `PlayerGameRow`.
 - Game-length trends (duration, turns) over the most recent
   `TREND_GAME_LIMIT` (100) games, chronological.
 

@@ -248,10 +248,10 @@ class StatsOverview(BaseModel):
 
 class PlayerGameRow(BaseModel):
     """One row per (game, player) observation -- the flat shape cross-game
-    correlation queries need (e.g. dev cards used vs. robbing income), as
-    opposed to PlayerAggregateStats' one-row-per-player rollup. Fields come
-    straight off the existing `games` collection; nothing here requires a
-    decode-time schema change."""
+    correlation and win-rate-by-bucket queries need (e.g. win rate by trade
+    income), as opposed to PlayerAggregateStats' one-row-per-player rollup.
+    Fields come straight off the existing `games` collection; nothing here
+    requires a decode-time schema change."""
 
     game_id: str
     played_at: Optional[datetime] = None
@@ -264,6 +264,7 @@ class PlayerGameRow(BaseModel):
     held_largest_army: bool = False
     held_longest_road: bool = False
     is_winner: bool
+    victory_points_by_source: Dict[str, int] = Field(default_factory=dict)
     starting_placement_pips: Optional[int] = None
     starting_placement_resource_diversity: Optional[int] = None
     total_resource_income: Optional[int] = None
@@ -275,3 +276,4 @@ class PlayerGameRow(BaseModel):
     dev_cards_bought: Optional[int] = None
     dev_cards_used: Optional[int] = None
     knight_cards_played: Optional[int] = None
+    production_lost_to_robber: Optional[int] = None

@@ -103,8 +103,9 @@ async def get_player_stats(db: AsyncIOMotorDatabase) -> List[PlayerAggregateStat
 
 async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
     """One row per (game, player) -- deliberately no $group, so correlation
-    plots (pips vs. final VP, dev cards used vs. robbing income, ...) get a
-    real per-observation scatter rather than a pre-aggregated rollup."""
+    plots and win-rate-by-bucket charts (pips vs. final VP, win rate by
+    trade income, ...) get a real per-observation scatter/bucket rather than
+    a pre-aggregated rollup."""
     pipeline = [
         {"$unwind": "$players"},
         {
@@ -121,6 +122,7 @@ async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
                 "held_largest_army": "$players.held_largest_army",
                 "held_longest_road": "$players.held_longest_road",
                 "is_winner": "$players.is_winner",
+                "victory_points_by_source": "$players.victory_points_by_source",
                 "starting_placement_pips": "$players.starting_placement_pips",
                 "starting_placement_resource_diversity": "$players.starting_placement_resource_diversity",
                 "total_resource_income": "$players.resource_stats.totalResourceIncome",
@@ -132,6 +134,7 @@ async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
                 "dev_cards_bought": "$players.activity_stats.devCardsBought",
                 "dev_cards_used": "$players.activity_stats.devCardsUsed",
                 "knight_cards_played": "$players.dev_cards.knight",
+                "production_lost_to_robber": "$players.robber.production_lost_to_robber",
             }
         },
     ]

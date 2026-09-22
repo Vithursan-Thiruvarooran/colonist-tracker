@@ -1,0 +1,24 @@
+# Standalone compose file for building/running the backend API.
+# Service name, image tag, container name, and port match the
+# `webserver-api` / `webserver-catan-api` placeholder already reserved for
+# this project in the shared nginx compose file, so this block can be
+# dropped in there as-is once you're ready to deploy (drop `build:` and keep
+# `image:` if you push to a registry instead of building on the host).
+services:
+  webserver-api:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: vithiru/webserver-api:latest
+    container_name: webserver-catan-api
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - server/.env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

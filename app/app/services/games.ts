@@ -260,6 +260,7 @@ export interface PlayerGameRow {
   held_largest_army: boolean;
   held_longest_road: boolean;
   is_winner: boolean;
+  victory_points_by_source: Record<string, number>;
   starting_placement_pips: number | null;
   starting_placement_resource_diversity: number | null;
   total_resource_income: number | null;
@@ -271,6 +272,7 @@ export interface PlayerGameRow {
   dev_cards_bought: number | null;
   dev_cards_used: number | null;
   knight_cards_played: number | null;
+  production_lost_to_robber: number | null;
 }
 
 export function listGames(
