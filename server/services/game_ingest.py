@@ -12,7 +12,7 @@ from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from server.models.game import FetchResult
+from server.models.game import FetchResult, ImportResult
 from server.services.game_documents import build_game_document
 from server.services.player_registry import relink_users_to_players, upsert_players_from_game
 from server.services.timeline_documents import build_timeline_document
@@ -27,9 +27,14 @@ def _unwrap_raw(raw: dict) -> dict:
 
 
 async def _store_game(
-    db: AsyncIOMotorDatabase, game_id: str, raw: dict, source_username: str, player_color: Optional[int]
+    db: AsyncIOMotorDatabase,
+    game_id: str,
+    raw: dict,
+    source_username: str,
+    player_color: Optional[int],
+    fetched_at: Optional[datetime] = None,
 ) -> None:
-    fetched_at = datetime.now(timezone.utc)
+    fetched_at = fetched_at or datetime.now(timezone.utc)
     await db.raw_games.update_one(
         {"game_id": game_id},
         {
@@ -88,6 +93,63 @@ async def rebuild_all_games(db: AsyncIOMotorDatabase) -> int:
         count += 1
     await relink_users_to_players(db)
     return count
+
+
+async def export_raw_games(db: AsyncIOMotorDatabase) -> list:
+    """Dump every `raw_games` document verbatim for backup -- the durable
+    source of truth, sufficient on its own to rebuild `games` and
+    `game_timelines` via import_raw_games() below."""
+    return [doc async for doc in db.raw_games.find({}, {"_id": 0})]
+
+
+async def import_raw_games(db: AsyncIOMotorDatabase, entries: list) -> ImportResult:
+    """Restore raw payloads from an export produced by export_raw_games().
+    Unlike ingest_raw_game(), preserves each entry's original
+    source_username/player_color/fetched_at rather than stamping them as a
+    fresh "manual" ingest happening now -- this is a restore, not a new
+    capture. Games already present (by game_id) are skipped, so re-running
+    an import (e.g. a partial restore that errored partway through) is
+    safe."""
+    stored = 0
+    skipped = 0
+    errors: list = []
+    for entry in entries:
+        raw = entry.get("raw")
+        if not isinstance(raw, dict):
+            errors.append(f"{entry.get('game_id', '?')}: entry has no 'raw' payload")
+            continue
+        raw = _unwrap_raw(raw)
+
+        game_id = entry.get("game_id") or raw.get("databaseGameId")
+        if not game_id:
+            errors.append("Entry missing 'game_id'/'databaseGameId'")
+            continue
+        game_id = str(game_id)
+
+        if await db.raw_games.find_one({"game_id": game_id}, {"_id": 1}):
+            skipped += 1
+            continue
+
+        fetched_at = entry.get("fetched_at")
+        if isinstance(fetched_at, str):
+            fetched_at = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+        elif not isinstance(fetched_at, datetime):
+            fetched_at = None
+
+        try:
+            await _store_game(
+                db,
+                game_id,
+                raw,
+                entry.get("source_username") or "manual",
+                entry.get("player_color"),
+                fetched_at=fetched_at,
+            )
+            stored += 1
+        except Exception as exc:  # noqa: BLE001 -- one bad entry shouldn't abort the whole import
+            errors.append(f"{game_id}: {exc}")
+
+    return ImportResult(stored=stored, skipped=skipped, errors=errors)
 
 
 async def rebuild_all_timelines(db: AsyncIOMotorDatabase) -> int:

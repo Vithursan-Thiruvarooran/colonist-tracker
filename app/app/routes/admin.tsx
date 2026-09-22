@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { AuthGate } from "../components/ui/AuthGate";
@@ -12,12 +12,16 @@ import { useAuthGate } from "../hooks/useAuthGate";
 import { formatDateTime } from "../lib/format";
 import {
   approveUser,
+  exportRawGames,
   getIngestToken,
+  importRawGames,
   listPendingUsers,
   regenerateIngestToken,
   rejectUser,
   type AdminUserRow,
   type ApiToken,
+  type ImportResult,
+  type RawGameExport,
 } from "../services/admin";
 import { listGames, type GameSummary } from "../services/games";
 
@@ -32,6 +36,10 @@ export default function Admin() {
   const [tokenLoading, setTokenLoading] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [recentIngests, setRecentIngests] = useState<GameSummary[]>([]);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (status !== "ready") return;
@@ -68,6 +76,44 @@ export default function Admin() {
       setTimeout(() => setTokenCopied(false), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to copy token");
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    setError(null);
+    try {
+      const games = await exportRawGames();
+      const blob = new Blob([JSON.stringify(games, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `colonist-raw-games-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to export games");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setError(null);
+    setImportResult(null);
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!Array.isArray(parsed)) throw new Error("Expected a JSON array, as produced by Export");
+      const result = await importRawGames(parsed as RawGameExport[]);
+      setImportResult(result);
+      if (result.stored > 0) {
+        setRecentIngests(await listGames({ limit: RECENT_INGESTS_LIMIT, sortBy: "fetched_at" }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to import games");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -125,6 +171,52 @@ export default function Admin() {
             {tokenLoading ? "Regenerating…" : "Regenerate"}
           </Button>
         </div>
+      </Panel>
+
+      <SectionHeader
+        title="Backup & restore"
+        caption="Export every stored raw replay to a JSON file, or restore from one."
+      />
+      <Panel className="mb-6 max-w-2xl">
+        <p className="mb-3 text-sm text-ink-dim">
+          Export downloads every <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">raw_games</code>{" "}
+          document -- the source of truth every derived collection is rebuilt from. Import re-uploads that file, skipping
+          games already stored (matched by <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">game_id</code>
+          ), so it's safe to import the same backup more than once.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline-surface" disabled={exporting} onClick={handleExport}>
+            {exporting ? "Exporting…" : "Export raw games"}
+          </Button>
+          <Button variant="outline-surface" disabled={importing} onClick={() => fileInputRef.current?.click()}>
+            {importing ? "Importing…" : "Import from file"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handleImportFile(file);
+            }}
+          />
+        </div>
+        {importResult && (
+          <p className="mt-3 text-sm text-ink-dim">
+            Imported {importResult.stored} game{importResult.stored === 1 ? "" : "s"}, skipped {importResult.skipped}{" "}
+            already stored.
+            {importResult.errors.length > 0 && (
+              <>
+                {" "}
+                <span className="text-error-ink">
+                  {importResult.errors.length} error{importResult.errors.length === 1 ? "" : "s"}: {importResult.errors.join("; ")}
+                </span>
+              </>
+            )}
+          </p>
+        )}
       </Panel>
 
       <SectionHeader title="Recent ingests" caption="The most recently stored games, regardless of source." />

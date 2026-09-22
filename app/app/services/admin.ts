@@ -35,3 +35,28 @@ export function getIngestToken(): Promise<ApiToken> {
 export function regenerateIngestToken(): Promise<ApiToken> {
   return apiFetch<ApiToken>("/api/admin/ingest-token/regenerate", { method: "POST" });
 }
+
+export interface RawGameExport {
+  game_id: string;
+  raw: unknown;
+  source_username: string | null;
+  player_color: number | null;
+  fetched_at: string | null;
+}
+
+export interface ImportResult {
+  stored: number;
+  skipped: number;
+  errors: string[];
+}
+
+export function exportRawGames(): Promise<RawGameExport[]> {
+  return apiFetch<RawGameExport[]>("/api/admin/export");
+}
+
+export function importRawGames(entries: RawGameExport[]): Promise<ImportResult> {
+  return apiFetch<ImportResult>("/api/admin/import", {
+    method: "POST",
+    body: JSON.stringify(entries),
+  });
+}
