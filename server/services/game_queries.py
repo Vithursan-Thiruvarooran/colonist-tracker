@@ -126,6 +126,7 @@ async def get_player_game_rows(db: AsyncIOMotorDatabase) -> List[PlayerGameRow]:
                 "starting_placement_pips": "$players.starting_placement_pips",
                 "starting_placement_resource_diversity": "$players.starting_placement_resource_diversity",
                 "total_resource_income": "$players.resource_stats.totalResourceIncome",
+                "rolling_income": "$players.resource_stats.rollingIncome",
                 "robbing_income": "$players.resource_stats.robbingIncome",
                 "trade_income": "$players.resource_stats.tradeIncome",
                 "dev_card_income": "$players.resource_stats.devCardIncome",

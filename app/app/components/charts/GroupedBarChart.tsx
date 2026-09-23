@@ -31,7 +31,7 @@ export function GroupedBarChart({
         <Tooltip contentStyle={tooltipContentStyle} labelStyle={tooltipLabelStyle} />
         <Legend wrapperStyle={legendStyle} />
         {series.map((s) => (
-          <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+          <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
         ))}
       </BarChart>
     </ChartFrame>

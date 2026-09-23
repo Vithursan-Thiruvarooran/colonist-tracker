@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { AuthGate } from "../components/ui/AuthGate";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { InlineCode } from "../components/ui/Code";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Panel } from "../components/ui/Panel";
 import { SectionHeader } from "../components/ui/SectionHeader";
@@ -148,7 +149,7 @@ export default function Admin() {
     <div>
       <h1 className="mb-4 font-display text-2xl font-medium text-parchment">Admin</h1>
 
-      {error && <p className="mb-3 text-sm text-error-ink">{error}</p>}
+      {error && <p className="mb-3 text-sm text-error">{error}</p>}
 
       <SectionHeader
         title="Chrome extension ingest token"
@@ -156,8 +157,7 @@ export default function Admin() {
       />
       <Panel className="mb-6 max-w-2xl">
         <p className="mb-3 text-sm text-ink-dim">
-          Paste this into the extension's popup. It authorizes{" "}
-          <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">POST /api/games/ingest</code> in
+          Paste this into the extension's popup. It authorizes <InlineCode>POST /api/games/ingest</InlineCode> in
           place of a login -- regenerating invalidates the old token immediately.
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -179,10 +179,9 @@ export default function Admin() {
       />
       <Panel className="mb-6 max-w-2xl">
         <p className="mb-3 text-sm text-ink-dim">
-          Export downloads every <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">raw_games</code>{" "}
-          document -- the source of truth every derived collection is rebuilt from. Import re-uploads that file, skipping
-          games already stored (matched by <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">game_id</code>
-          ), so it's safe to import the same backup more than once.
+          Export downloads every <InlineCode>raw_games</InlineCode> document -- the source of truth every derived
+          collection is rebuilt from. Import re-uploads that file, skipping games already stored (matched by{" "}
+          <InlineCode>game_id</InlineCode>), so it's safe to import the same backup more than once.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline-surface" disabled={exporting} onClick={handleExport}>
@@ -228,7 +227,7 @@ export default function Admin() {
           to get started.
         </EmptyState>
       ) : (
-        <Panel className="mb-6 max-w-2xl">
+        <Panel className="mb-6">
           <Table>
             <thead>
               <tr>

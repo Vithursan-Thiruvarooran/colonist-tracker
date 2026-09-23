@@ -35,7 +35,7 @@ export function DiceRollChart({ distribution, height = 240 }: { distribution: Re
           wrapperStyle={legendStyle}
           formatter={(value: string) => (value === "expected" ? "Expected (2d6 odds)" : "Rolled")}
         />
-        <Bar dataKey="actual" name="actual" fill={SEQUENTIAL_HUE} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+        <Bar dataKey="actual" name="actual" fill={SEQUENTIAL_HUE} radius={[4, 4, 0, 0]} maxBarSize={24} isAnimationActive={false} />
         <Line
           dataKey="expected"
           name="expected"

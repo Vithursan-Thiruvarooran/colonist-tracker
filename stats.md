@@ -211,7 +211,7 @@ field already described above (`victory_point_percentage`,
 `play_order_position`, `held_largest_army`, `held_longest_road`,
 `victory_points_by_source`, `starting_placement_pips`,
 `starting_placement_resource_diversity`, `total_resource_income`,
-`robbing_income`, `trade_income`, `dev_card_income`, `proposed_trades`,
+`rolling_income`, `robbing_income`, `trade_income`, `dev_card_income`, `proposed_trades`,
 `successful_trades`, `dev_cards_bought`, `dev_cards_used`,
 `knight_cards_played`, `production_lost_to_robber`).
 
@@ -232,24 +232,33 @@ Everything below is computed in the browser from `PlayerGameRow[]` /
   value, capped to the `MAX_RANKED_PLAYERS` (10) most-played.
 - Scoring efficiency scatter (avg VP vs. win rate, bubble size = games
   played).
-- Avg victory points by source, per player (`StackedCompositionChart`) --
-  same ranked/capped roster as the avg VP bar, but each player's average
+- Avg victory points by source, per player (`StackedCompositionChart`,
+  built by the shared `avgVpBySource()` helper) -- same ranked/capped
+  roster as the avg VP bar, but each player's average
   `victory_points_by_source` (see the per-player table above) averaged
   independently per source across their games and stacked, using the same
   `VP_SOURCES` key/label/order as `game-detail.tsx`'s per-game breakdown.
   Shows *how* a player tends to reach their score (settlements-heavy vs.
   leaning on Largest Army, say), not just the final total.
+- Avg resource income by source, per player (`StackedCompositionChart`,
+  built by the shared `avgBySource()` helper via `avgResourceIncomeBySource()`)
+  -- same shape as the VP-by-source chart above, but for where each
+  player's resource *cards* come from: `rolling_income` (dice rolls),
+  `robbing_income`, `trade_income`, `dev_card_income` (Year of
+  Plenty/Monopoly), same key/label/order as `game-detail.tsx`'s
+  `RESOURCE_INCOME_SOURCES`. A production-style view alongside the
+  scoring-style one above.
 - Win rate by turn order (`play_order_position`), win rate split by
   `held_largest_army` / `held_longest_road` (`heldWinRateRows()`), and win
-  rate by trade income and by production lost to the robber
-  (`bucketedWinRateRows()`, `trade_income` / `production_lost_to_robber`
-  each bucketed into quartiles by their own distribution -- not fixed
-  thresholds, so the buckets stay meaningful as more games get ingested) --
-  same grouping as the by-player view below, but over every `PlayerGameRow`
-  across every player and game, not filtered to one player. Answers "does
-  seat order, a bonus achievement, trading, or the robber move the odds at
-  all" at the population level, as opposed to the by-player view's "for
-  this specific player."
+  rate by trade income, by dev cards bought, and by production lost to the
+  robber (`bucketedWinRateRows()`, `trade_income` / `dev_cards_bought` /
+  `production_lost_to_robber` each bucketed into quartiles by their own
+  distribution -- not fixed thresholds, so the buckets stay meaningful as
+  more games get ingested) -- same grouping as the by-player view below,
+  but over every `PlayerGameRow` across every player and game, not filtered
+  to one player. Answers "does seat order, a bonus achievement, trading,
+  resource luck, or the robber move the odds at all" at the population
+  level, as opposed to the by-player view's "for this specific player."
 - Win rate by starting resource diversity (`starting_placement_resource_
   diversity`) -- one bar per observed distinct-resource count (3/4/5), same
   exact-value grouping as the seat chart, since the range is small enough
@@ -275,6 +284,15 @@ match), plus:
 - Win rate split by `held_largest_army` / `held_longest_road`
   (`heldWinRateRows()`) -- fixed "Held" / "Didn't hold" order so the two
   bars are always directly comparable.
+- Avg victory points by source, this player only -- the same
+  `avgVpBySource()` helper as the all-players chart above, but re-cast as a
+  `RankedBarChart` (one bar per source, ranked highest to lowest) rather
+  than a `StackedCompositionChart`: with only one player there's no series
+  to distinguish, so the source becomes the ranked category instead, same
+  as this view's other single-metric breakdowns (win rate by seat, by
+  achievement).
+- Avg resource income by source, this player only -- same treatment as the
+  VP-by-source `RankedBarChart` above, via `avgResourceIncomeBySource()`.
 - VP% trend across that player's games, chronological.
 
 ---

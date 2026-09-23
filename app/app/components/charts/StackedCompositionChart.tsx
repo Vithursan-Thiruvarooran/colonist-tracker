@@ -37,10 +37,10 @@ export function StackedCompositionChart({
             name={source.label}
             stackId="composition"
             fill={categoricalColor(i)}
-            stroke={CHART_INK.tooltipBg}
+            stroke={CHART_INK.surface}
             strokeWidth={2}
             radius={i === sources.length - 1 ? [4, 4, 0, 0] : 0}
-            maxBarSize={64}
+            maxBarSize={24}
             isAnimationActive={false}
           />
         ))}

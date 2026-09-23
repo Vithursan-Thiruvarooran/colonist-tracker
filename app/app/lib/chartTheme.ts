@@ -1,13 +1,13 @@
 // Validated categorical palette (dataviz skill reference palette, see
 // palette.md) against this app's one committed chart surface: the parchment
-// panel color (#efe7d8), not a generic white/near-black pair. Re-run
-// `node scripts/validate_palette.js "<hexes>" --mode light --surface "#efe7d8"`
+// panel color (#e2d4ba), not a generic white/near-black pair. Re-run
+// `node scripts/validate_palette.js "<hexes>" --mode light --surface "#e2d4ba"`
 // from the dataviz skill if either the surface or the hue order changes.
 //
 // Fixed hue order, colorblind-safe on adjacent pairs (stacks/bars) -- never
 // cycle or reassign these by rank. A series keeps its slot regardless of
-// what else is on screen. Four slots (orange/aqua/yellow/magenta) sit below
-// 3:1 contrast on parchment by design; every chart using them ships a
+// what else is on screen. Five slots (orange/aqua/yellow/magenta/red) sit
+// below 3:1 contrast on parchment by design; every chart using them ships a
 // legend or direct labels (the "relief" the dataviz skill requires) rather
 // than relying on the fill color alone.
 const CATEGORICAL = [
@@ -45,6 +45,13 @@ export const CHART_INK = {
   secondary: "#6b5e4d", // axis/tick labels -- ~5.1:1 on parchment, clears AA
   grid: "#ddd0ba",
   axis: "#b3a487",
+  // The parchment Panel background every chart in this app sits on --
+  // *not* tooltipBg below. Used for the mark-spec "surface gap"/ring: a
+  // stroke in this color, drawn around a stacked segment or a marker, reads
+  // as negative space only if it matches the real surface behind it.
+  surface: "#e2d4ba",
+  // Deliberately lighter than `surface` so the floating tooltip card
+  // visually separates from the panel it's drawn over instead of blending in.
   tooltipBg: "#f7f2e7",
   tooltipBorder: "#c9bea8",
 };

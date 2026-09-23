@@ -264,6 +264,7 @@ export interface PlayerGameRow {
   starting_placement_pips: number | null;
   starting_placement_resource_diversity: number | null;
   total_resource_income: number | null;
+  rolling_income: number | null;
   robbing_income: number | null;
   trade_income: number | null;
   dev_card_income: number | null;

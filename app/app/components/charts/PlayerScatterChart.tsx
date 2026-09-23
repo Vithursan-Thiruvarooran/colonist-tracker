@@ -65,7 +65,7 @@ export function PlayerScatterChart({
         />
         <Scatter data={data} isAnimationActive={false}>
           {data.map((point) => (
-            <Cell key={point.name} fill={SEQUENTIAL_HUE} fillOpacity={0.85} stroke={CHART_INK.tooltipBg} strokeWidth={2} />
+            <Cell key={point.name} fill={SEQUENTIAL_HUE} fillOpacity={0.85} stroke={CHART_INK.surface} strokeWidth={2} />
           ))}
           {data.length <= 8 && (
             <LabelList dataKey="name" position="top" offset={10} fill={CHART_INK.secondary} fontSize={11} />

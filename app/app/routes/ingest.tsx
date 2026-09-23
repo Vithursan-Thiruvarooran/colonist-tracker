@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { AuthGate } from "../components/ui/AuthGate";
 import { Button } from "../components/ui/Button";
+import { InlineCode } from "../components/ui/Code";
 import { Textarea } from "../components/ui/Input";
 import { Panel } from "../components/ui/Panel";
 import { useAuthGate } from "../hooks/useAuthGate";
@@ -53,10 +54,8 @@ export default function Ingest() {
 
       <p className="mb-4 text-sm text-seafoam">
         Grab the response body of colonist.io's replay request (DevTools → Network → the{" "}
-        <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">data-from-game-id</code> request, or
-        the Chrome capture extension) and paste it below. Both the unwrapped payload and the full{" "}
-        <code className="rounded bg-ocean-deep px-1 py-0.5 text-xs text-seafoam">{"{ data: {...} }"}</code> response
-        are accepted.
+        <InlineCode>data-from-game-id</InlineCode> request, or the Chrome capture extension) and paste it below. Both
+        the unwrapped payload and the full <InlineCode>{"{ data: {...} }"}</InlineCode> response are accepted.
       </p>
 
       <Panel>

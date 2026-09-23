@@ -286,6 +286,7 @@ class PlayerGameRow(BaseModel):
     starting_placement_pips: Optional[int] = None
     starting_placement_resource_diversity: Optional[int] = None
     total_resource_income: Optional[int] = None
+    rolling_income: Optional[int] = None
     robbing_income: Optional[int] = None
     trade_income: Optional[int] = None
     dev_card_income: Optional[int] = None

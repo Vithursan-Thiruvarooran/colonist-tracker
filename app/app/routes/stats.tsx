@@ -44,6 +44,15 @@ const VP_SOURCES: CompositionSource[] = [
   { key: "longest_road", label: "Longest Road" },
 ];
 
+// Same source set/order as game-detail.tsx's RESOURCE_INCOME_SOURCES, keyed
+// to PlayerGameRow's flat fields instead of a nested resource_stats object.
+const RESOURCE_INCOME_SOURCES: CompositionSource[] = [
+  { key: "rolling_income", label: "From rolls" },
+  { key: "robbing_income", label: "From robbing" },
+  { key: "trade_income", label: "From trades" },
+  { key: "dev_card_income", label: "From dev cards" },
+];
+
 function StatTile({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
     <Panel>
@@ -59,6 +68,44 @@ function formatPercent(value: number): string {
 
 function formatVp(value: number): string {
   return value.toFixed(1);
+}
+
+/** Average-per-source composition row for one entity, across whichever rows
+ * it's scoped to (every game for the aggregate view, just one player's for
+ * the by-player view) -- shared by the VP-by-source and resource-income-by-
+ * source charts, which differ only in the source list and where each
+ * source's value lives on a row. Null when there are no rows to average, so
+ * callers can filter incomplete entries out. */
+function avgBySource(
+  name: string,
+  rows: PlayerGameRow[],
+  sources: CompositionSource[],
+  getValue: (row: PlayerGameRow, key: string) => number,
+): (Record<string, string | number> & { total: number }) | null {
+  if (rows.length === 0) return null;
+
+  const totals: Record<string, number> = {};
+  let total = 0;
+  for (const source of sources) {
+    const values = rows.map((r) => getValue(r, source.key));
+    const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
+    totals[source.key] = Math.round(avg * 10) / 10;
+    total += avg;
+  }
+  return { name, total, ...totals };
+}
+
+function avgVpBySource(name: string, rows: PlayerGameRow[]) {
+  const withSources = rows.filter((r) => Object.keys(r.victory_points_by_source).length > 0);
+  return avgBySource(name, withSources, VP_SOURCES, (r, key) => r.victory_points_by_source[key] ?? 0);
+}
+
+function avgResourceIncomeBySource(name: string, rows: PlayerGameRow[]) {
+  const withIncome = rows.filter((r) => r.total_resource_income != null);
+  return avgBySource(name, withIncome, RESOURCE_INCOME_SOURCES, (r, key) => {
+    const value = (r as unknown as Record<string, number | null>)[key];
+    return value ?? 0;
+  });
 }
 
 /** Correlation chart(s) shared by the aggregate and by-player views -- same
@@ -203,6 +250,7 @@ export default function Stats() {
   const allLongestRoadWinRate = heldWinRateRows(playerGameRows, (r) => r.held_longest_road);
   const tradeIncomeWinRate = bucketedWinRateRows(playerGameRows, (r) => r.trade_income);
   const robberLossWinRate = bucketedWinRateRows(playerGameRows, (r) => r.production_lost_to_robber);
+  const devCardsBoughtWinRate = bucketedWinRateRows(playerGameRows, (r) => r.dev_cards_bought);
 
   const diversityValues = [
     ...new Set(playerGameRows.map((r) => r.starting_placement_resource_diversity).filter((n): n is number => n != null)),
@@ -244,21 +292,18 @@ export default function Stats() {
   // rate / avg VP bars above, sorted by total avg VP so it reads as an
   // extension of the avg-VP bar rather than a separate ranking.
   const vpSourceData = rankedPlayers
-    .map((p) => {
-      const rows = playerGameRows.filter(
-        (r) => (r.user_id ?? r.name) === (p.user_id ?? p.name) && Object.keys(r.victory_points_by_source).length > 0,
-      );
-      const totals: Record<string, number> = {};
-      let total = 0;
-      for (const source of VP_SOURCES) {
-        const values = rows.map((r) => r.victory_points_by_source[source.key] ?? 0);
-        const avg = values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
-        totals[source.key] = Math.round(avg * 10) / 10;
-        total += avg;
-      }
-      return { name: p.name, rowCount: rows.length, total, ...totals };
-    })
-    .filter((row) => row.rowCount > 0)
+    .map((p) => avgVpBySource(p.name, playerGameRows.filter((r) => (r.user_id ?? r.name) === (p.user_id ?? p.name))))
+    .filter((row): row is NonNullable<typeof row> => row !== null)
+    .sort((a, b) => b.total - a.total);
+
+  // Same treatment as vpSourceData, for resource income instead of victory
+  // points -- where each player's cards tend to come from (rolls, robbing,
+  // trading, dev cards), not just how much they end up with.
+  const resourceIncomeSourceData = rankedPlayers
+    .map((p) =>
+      avgResourceIncomeBySource(p.name, playerGameRows.filter((r) => (r.user_id ?? r.name) === (p.user_id ?? p.name))),
+    )
+    .filter((row): row is NonNullable<typeof row> => row !== null)
     .sort((a, b) => b.total - a.total);
 
   // -- By-player view -------------------------------------------------
@@ -283,6 +328,25 @@ export default function Stats() {
   });
   const largestArmyWinRate = heldWinRateRows(playerRows, (r) => r.held_largest_army);
   const longestRoadWinRate = heldWinRateRows(playerRows, (r) => r.held_longest_road);
+  // A single player has no "series" to distinguish -- once StackedComposition-
+  // Chart's one-row bar was the only thing on screen, it was just a rotated
+  // stat block. Re-cast as the same job as every other single-player chart
+  // here (win rate by seat, by achievement, ...): one magnitude per category,
+  // ranked, in the app's single sequential hue.
+  const playerVpSourceRow = selectedPlayer ? avgVpBySource(selectedPlayer.name, playerRows) : null;
+  const playerVpSourceRows: RankedBarRow[] = playerVpSourceRow
+    ? VP_SOURCES.map((s) => ({ name: s.label, value: Number(playerVpSourceRow[s.key]), color: SEQUENTIAL_HUE })).sort(
+        (a, b) => b.value - a.value,
+      )
+    : [];
+  const playerResourceIncomeRow = selectedPlayer ? avgResourceIncomeBySource(selectedPlayer.name, playerRows) : null;
+  const playerResourceIncomeRows: RankedBarRow[] = playerResourceIncomeRow
+    ? RESOURCE_INCOME_SOURCES.map((s) => ({
+        name: s.label,
+        value: Number(playerResourceIncomeRow[s.key]),
+        color: SEQUENTIAL_HUE,
+      })).sort((a, b) => b.value - a.value)
+    : [];
 
   const playerCorrelations = buildCorrelations(playerRows);
 
@@ -408,6 +472,17 @@ export default function Stats() {
         </Panel>
       )}
 
+      {resourceIncomeSourceData.length > 1 && (
+        <Panel className="mt-3">
+          <h3 className="mb-1 text-sm font-medium text-ink-dim">Avg resource income by source</h3>
+          <p className="mb-3 text-xs text-ink-dim">
+            Same players and ranking as above, split by where each player's resource cards actually came from --
+            dice rolls, robbing, trading, or dev cards.
+          </p>
+          <StackedCompositionChart data={resourceIncomeSourceData} sources={RESOURCE_INCOME_SOURCES} height={320} />
+        </Panel>
+      )}
+
       <SectionHeader
         title="What moves the win rate"
         caption="Win rate across every player-game observation, not per-player -- does seat order, a bonus achievement, trading, resource luck, or the robber move the odds at all?"
@@ -469,6 +544,16 @@ export default function Stats() {
               into quartiles across every game.
             </p>
             <RankedBarChart data={robberLossWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
+          </Panel>
+        )}
+        {devCardsBoughtWinRate.length > 1 && (
+          <Panel className="lg:col-span-2">
+            <h3 className="mb-1 text-sm font-medium text-ink-dim">Win rate by dev cards bought</h3>
+            <p className="mb-3 text-xs text-ink-dim">
+              Development cards purchased from the bank, grouped into quartiles across every game -- does buying
+              more of them pay off, or just spend resources that could've gone toward building?
+            </p>
+            <RankedBarChart data={devCardsBoughtWinRate} domain={[0, 100]} unit="%" formatValue={formatPercent} />
           </Panel>
         )}
       </div>
@@ -576,6 +661,27 @@ export default function Stats() {
               tip={avgVpPercent != null ? `${avgVpPercent.toFixed(0)}% of victory points needed to win, on average` : undefined}
             />
           </div>
+
+          {playerVpSourceRow && (
+            <Panel className="mb-6">
+              <h3 className="mb-1 text-sm font-medium text-ink-dim">Avg victory points by source</h3>
+              <p className="mb-3 text-xs text-ink-dim">
+                Where {selectedPlayer.name}'s final score typically comes from, averaged across their games and
+                ranked highest to lowest.
+              </p>
+              <RankedBarChart data={playerVpSourceRows} domain={[0, "auto"]} formatValue={formatVp} />
+            </Panel>
+          )}
+
+          {playerResourceIncomeRow && (
+            <Panel className="mb-6">
+              <h3 className="mb-1 text-sm font-medium text-ink-dim">Avg resource income by source</h3>
+              <p className="mb-3 text-xs text-ink-dim">
+                Where {selectedPlayer.name}'s resource cards typically come from, averaged across their games.
+              </p>
+              <RankedBarChart data={playerResourceIncomeRows} domain={[0, "auto"]} formatValue={formatVp} />
+            </Panel>
+          )}
 
           {playerRows.length > 0 && (
             <>

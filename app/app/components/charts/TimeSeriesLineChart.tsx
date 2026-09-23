@@ -47,7 +47,7 @@ export function TimeSeriesLineChart({
           fill={SEQUENTIAL_HUE}
           fillOpacity={0.1}
           dot={false}
-          activeDot={{ r: 4, fill: SEQUENTIAL_HUE, stroke: CHART_INK.tooltipBg, strokeWidth: 2 }}
+          activeDot={{ r: 4, fill: SEQUENTIAL_HUE, stroke: CHART_INK.surface, strokeWidth: 2 }}
           isAnimationActive={false}
         />
       </ComposedChart>
