@@ -68,7 +68,7 @@ export default function Nav() {
         <NavLink to="/" className="flex items-center gap-2.5">
           <Hex size={22} background="var(--color-brick)" />
           <span className="font-display text-base font-medium text-parchment sm:text-lg">
-            Colonist Data Extractor
+            Colonist Tracker
           </span>
         </NavLink>
 
