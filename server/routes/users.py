@@ -17,7 +17,7 @@ from server.services.user_auth import login as login_user
 from server.services.user_auth import signup as signup_user
 from server.services.user_auth import update_profile as update_user_profile
 
-router = APIRouter(prefix="/api/users", tags=["users"])
+router = APIRouter(prefix="/colonist/api/users", tags=["users"])
 
 
 async def _build_profile(user: Dict[str, Any], db) -> UserProfile:

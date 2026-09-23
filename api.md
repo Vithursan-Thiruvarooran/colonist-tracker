@@ -34,9 +34,9 @@ required tier (e.g. a non-admin hitting an admin route) returns **403**.
 
 ---
 
-## Games -- `/api/games` (`server/routes/games.py`)
+## Games -- `/colonist/api/games` (`server/routes/games.py`)
 
-### `POST /api/games/ingest`
+### `POST /colonist/api/games/ingest`
 **Auth:** admin-or-ingest-token.
 
 Stores a raw colonist.io replay payload -- accepts either the unwrapped
@@ -63,7 +63,7 @@ there's no per-caller identity threaded through, only `player_color`
 
 Response: `FetchResult` -- `{game_id, status: "stored"|"skipped", reason}`.
 
-### `GET /api/games`
+### `GET /colonist/api/games`
 **Auth:** public.
 
 Paginated games list for the home page / ingestion history.
@@ -81,13 +81,13 @@ Response: `List[GameSummary]` -- the trimmed list-view shape (`game_queries.py`'
 game-level `trades`/`trading_stats`/`robber_moves`/`robber_stats` to keep a
 page of games cheap).
 
-### `GET /api/games/{game_id}`
+### `GET /colonist/api/games/{game_id}`
 **Auth:** public.
 
 Full single-game detail -- every field `stats.md` documents, nothing
 trimmed. Response: `GameDetail`. **404** if `game_id` isn't stored.
 
-### `GET /api/games/{game_id}/timeline`
+### `GET /colonist/api/games/{game_id}/timeline`
 **Auth:** public.
 
 The per-event playback document for the replay viewer
@@ -98,30 +98,30 @@ separate collection). Response: `GameTimeline`. **404** if not stored.
 
 ---
 
-## Stats -- `/api/stats` (`server/routes/stats.py`)
+## Stats -- `/colonist/api/stats` (`server/routes/stats.py`)
 
 All three are public, all three read the `games` collection only (no
 `raw_games`/timeline access) -- see `stats.md` for exactly how each
 aggregate is computed.
 
-### `GET /api/stats/players`
+### `GET /colonist/api/stats/players`
 One row per distinct player across every stored game (`get_player_stats()`
 -- a Mongo `$group` by `user_id`). Response: `List[PlayerAggregateStats]`.
 
-### `GET /api/stats/player-games`
+### `GET /colonist/api/stats/player-games`
 One row per (game, player) observation, deliberately unaggregated
 (`get_player_game_rows()` -- `$project`, no `$group`) for cross-game
 correlation scatter charts. Response: `List[PlayerGameRow]`.
 
-### `GET /api/stats/overview`
+### `GET /colonist/api/stats/overview`
 Fleet-wide numbers: total games, average duration/turns, combined dice
 distribution (`get_stats_overview()`). Response: `StatsOverview`.
 
 ---
 
-## Users -- `/api/users` (`server/routes/users.py`)
+## Users -- `/colonist/api/users` (`server/routes/users.py`)
 
-### `POST /api/users/signup`
+### `POST /colonist/api/users/signup`
 **Auth:** public. Body: `SignupRequest` (`email`, `username`, `password`
 min 8 chars).
 
@@ -134,19 +134,19 @@ game). Only an invalid email format, an empty username, or an
 already-registered email raises **400**.
 
 New accounts are `pending` until an admin approves them
-(`POST /api/admin/users/{user_id}/approve`) -- **except** the account whose
+(`POST /colonist/api/admin/users/{user_id}/approve`) -- **except** the account whose
 email matches `ADMIN_EMAIL` (`server/.env`), which self-approves and
 becomes admin immediately (bootstraps the first admin). Response:
 `SignupResponse` -- `{"status": "pending"|"approved"|"rejected"}`.
 
-### `POST /api/users/login`
+### `POST /colonist/api/users/login`
 **Auth:** public. Body: `UserLoginRequest` (`email`, `password`). Wrong
 credentials or a non-approved account raises **401** (not a distinct
 "pending" error -- the client can't tell "wrong password" from "not
 approved yet" from the status code alone, only from the message). Response:
 `UserLoginResponse` -- `{"token": "..."}`.
 
-### `GET /api/users/me`
+### `GET /colonist/api/users/me`
 **Auth:** user. Returns the caller's own profile, including their linked
 `colonist_user_id` if their username matched a `players` doc, and their
 `color` (hex, defaults to `#000000`, `DEFAULT_PLAYER_COLOR` in
@@ -156,7 +156,7 @@ username appears in a game, overriding the deterministic categorical
 color assigned to everyone else (`app/app/lib/chartTheme.ts`'s
 `resolvePlayerColor`). Response: `UserProfile`.
 
-### `PATCH /api/users/me`
+### `PATCH /colonist/api/users/me`
 **Auth:** user. Body: `UpdateProfileRequest` -- any of `email`/`username`/
 `password`/`color`, all optional (only supplied fields change). Changing
 `username` re-runs `find_player_by_username` and updates `player_id`
@@ -171,37 +171,37 @@ accounts can share a username; only an empty one is rejected). Response:
 
 ---
 
-## Admin -- `/api/admin` (`server/routes/admin.py`)
+## Admin -- `/colonist/api/admin` (`server/routes/admin.py`)
 
 Every route on this router requires admin (`dependencies=[Depends(require_admin)]`
 on the router itself, not per-route).
 
-### `GET /api/admin/ingest-token`
+### `GET /colonist/api/admin/ingest-token`
 Returns the single shared ingest token, creating it on first call
 (`get_or_create_ingest_token()`). Response: `ApiTokenResponse` --
 `{"token", "created_at"}`.
 
-### `POST /api/admin/ingest-token/regenerate`
+### `POST /colonist/api/admin/ingest-token/regenerate`
 Issues a new ingest token, immediately invalidating the old one (any
 Chrome extension still holding it starts getting 401s from
-`/api/games/ingest` until re-pasted). Response: `ApiTokenResponse`.
+`/colonist/api/games/ingest` until re-pasted). Response: `ApiTokenResponse`.
 
-### `GET /api/admin/export`
+### `GET /colonist/api/admin/export`
 Backup: dumps every `raw_games` document verbatim (`export_raw_games()`,
 `server/services/game_ingest.py`) -- `{game_id, raw, source_username,
 player_color, fetched_at}` per game, the same shape `POST
-/api/admin/import` consumes, so the download can be re-uploaded
+/colonist/api/admin/import` consumes, so the download can be re-uploaded
 unmodified. `raw_games` alone is sufficient to rebuild `games` and
 `game_timelines` (see `server/scripts/rebuild_games.py` /
 `rebuild_timelines.py`), so this is a complete backup of the underlying
 data. Response: `List[RawGameExport]`.
 
-### `POST /api/admin/import`
-Restore: re-ingests games from a `GET /api/admin/export` download. Body:
+### `POST /colonist/api/admin/import`
+Restore: re-ingests games from a `GET /colonist/api/admin/export` download. Body:
 `List[RawGameExport]`, the export's own shape. Delegates to
 `import_raw_games()`, which, per entry:
 1. Skips it if a `raw_games` doc with that `game_id` already exists --
-   same idempotency as `POST /api/games/ingest`, so re-importing the same
+   same idempotency as `POST /colonist/api/games/ingest`, so re-importing the same
    backup (or one with overlapping games) is always safe.
 2. Otherwise decodes and upserts all three derived collections exactly
    like a fresh ingest, **except** it preserves the entry's original
@@ -217,19 +217,19 @@ counts over the whole batch. Never returns a 400 for a per-entry problem;
 only a structurally invalid request body (fails `List[RawGameExport]`
 validation) does.
 
-### `GET /api/admin/users`
+### `GET /colonist/api/admin/users`
 Lists signup accounts for the approval queue. Query param `status`
 (default `"pending"`) -- `"all"` returns every status. Response:
 `List[AdminUserRow]`, oldest-created first.
 
-### `POST /api/admin/users/{user_id}/approve`
+### `POST /colonist/api/admin/users/{user_id}/approve`
 Sets the account to `approved`. If it doesn't already have a `player_id`
 (e.g. their matching `players` doc didn't exist yet at signup, because
 they hadn't appeared in a stored game), re-runs `find_player_by_username`
 once to try linking it now. **404** if `user_id` doesn't exist. Response:
 `AdminUserRow`.
 
-### `POST /api/admin/users/{user_id}/reject`
+### `POST /colonist/api/admin/users/{user_id}/reject`
 Sets the account to `rejected` -- their existing token (if any) stops
 working on its next call, since `get_current_user` re-checks `status`
 every time. **404** if `user_id` doesn't exist. Response: `AdminUserRow`.

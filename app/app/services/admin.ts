@@ -17,23 +17,23 @@ export interface ApiToken {
 }
 
 export function listPendingUsers(): Promise<AdminUserRow[]> {
-  return apiFetch<AdminUserRow[]>("/api/admin/users?status=pending");
+  return apiFetch<AdminUserRow[]>("/colonist/api/admin/users?status=pending");
 }
 
 export function approveUser(userId: string): Promise<AdminUserRow> {
-  return apiFetch<AdminUserRow>(`/api/admin/users/${userId}/approve`, { method: "POST" });
+  return apiFetch<AdminUserRow>(`/colonist/api/admin/users/${userId}/approve`, { method: "POST" });
 }
 
 export function rejectUser(userId: string): Promise<AdminUserRow> {
-  return apiFetch<AdminUserRow>(`/api/admin/users/${userId}/reject`, { method: "POST" });
+  return apiFetch<AdminUserRow>(`/colonist/api/admin/users/${userId}/reject`, { method: "POST" });
 }
 
 export function getIngestToken(): Promise<ApiToken> {
-  return apiFetch<ApiToken>("/api/admin/ingest-token");
+  return apiFetch<ApiToken>("/colonist/api/admin/ingest-token");
 }
 
 export function regenerateIngestToken(): Promise<ApiToken> {
-  return apiFetch<ApiToken>("/api/admin/ingest-token/regenerate", { method: "POST" });
+  return apiFetch<ApiToken>("/colonist/api/admin/ingest-token/regenerate", { method: "POST" });
 }
 
 export interface RawGameExport {
@@ -51,11 +51,11 @@ export interface ImportResult {
 }
 
 export function exportRawGames(): Promise<RawGameExport[]> {
-  return apiFetch<RawGameExport[]>("/api/admin/export");
+  return apiFetch<RawGameExport[]>("/colonist/api/admin/export");
 }
 
 export function importRawGames(entries: RawGameExport[]): Promise<ImportResult> {
-  return apiFetch<ImportResult>("/api/admin/import", {
+  return apiFetch<ImportResult>("/colonist/api/admin/import", {
     method: "POST",
     body: JSON.stringify(entries),
   });

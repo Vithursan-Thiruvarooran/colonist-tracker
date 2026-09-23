@@ -6,7 +6,7 @@ from server.db import get_db
 from server.models.game import PlayerAggregateStats, PlayerGameRow, StatsOverview
 from server.services.game_queries import get_player_game_rows, get_player_stats, get_stats_overview
 
-router = APIRouter(prefix="/api/stats", tags=["stats"])
+router = APIRouter(prefix="/colonist/api/stats", tags=["stats"])
 
 
 @router.get("/players", response_model=List[PlayerAggregateStats])

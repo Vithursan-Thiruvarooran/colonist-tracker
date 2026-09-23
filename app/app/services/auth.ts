@@ -35,21 +35,21 @@ export function isLoggedIn(): boolean {
 }
 
 export function signup(email: string, username: string, password: string): Promise<{ status: string }> {
-  return apiFetch<{ status: string }>("/api/users/signup", {
+  return apiFetch<{ status: string }>("/colonist/api/users/signup", {
     method: "POST",
     body: JSON.stringify({ email, username, password }),
   });
 }
 
 export function login(email: string, password: string): Promise<{ token: string }> {
-  return apiFetch<{ token: string }>("/api/users/login", {
+  return apiFetch<{ token: string }>("/colonist/api/users/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
 }
 
 export function fetchMe(): Promise<UserProfile> {
-  return apiFetch<UserProfile>("/api/users/me");
+  return apiFetch<UserProfile>("/colonist/api/users/me");
 }
 
 export function updateProfile(update: {
@@ -58,7 +58,7 @@ export function updateProfile(update: {
   password?: string;
   color?: string;
 }): Promise<UserProfile> {
-  return apiFetch<UserProfile>("/api/users/me", {
+  return apiFetch<UserProfile>("/colonist/api/users/me", {
     method: "PATCH",
     body: JSON.stringify(update),
   });

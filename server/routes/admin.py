@@ -11,7 +11,7 @@ from server.services.auth import require_admin
 from server.services.game_ingest import export_raw_games, import_raw_games
 from server.services.user_auth import set_user_status
 
-router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/colonist/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
 @router.get("/ingest-token", response_model=ApiTokenResponse)

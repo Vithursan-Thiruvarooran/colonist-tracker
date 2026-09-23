@@ -7,7 +7,7 @@ format for user sessions (no third-party auth library, no JWT dependency):
 
 `require_admin_or_ingest_token` is the one place these two mechanisms meet:
 it accepts either a logged-in admin's user token or the static ingest token,
-since `POST /api/games/ingest` is called both from the dashboard (a logged-in
+since `POST /colonist/api/games/ingest` is called both from the dashboard (a logged-in
 admin) and from the extension (no session, just the static token).
 """
 from __future__ import annotations

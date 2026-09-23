@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = "http://localhost:8000/api/games/ingest";
+const DEFAULT_BACKEND_URL = "http://localhost:8000/colonist/api/games/ingest";
 const MAX_CAPTURE_AGE_MS = 24 * 60 * 60 * 1000;
 
 const listEl = document.getElementById("captures");

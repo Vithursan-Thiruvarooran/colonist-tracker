@@ -7,7 +7,7 @@ export interface FetchResult {
 }
 
 export function ingestGame(raw: unknown): Promise<FetchResult> {
-  return apiFetch<FetchResult>("/api/games/ingest", {
+  return apiFetch<FetchResult>("/colonist/api/games/ingest", {
     method: "POST",
     body: JSON.stringify({ raw }),
   });
@@ -285,25 +285,25 @@ export function listGames(
   if (params.player) query.set("player", params.player);
   if (params.sortBy) query.set("sort_by", params.sortBy);
   const qs = query.toString();
-  return apiFetch<GameSummary[]>(`/api/games${qs ? `?${qs}` : ""}`);
+  return apiFetch<GameSummary[]>(`/colonist/api/games${qs ? `?${qs}` : ""}`);
 }
 
 export function getGame(gameId: string): Promise<GameDetail> {
-  return apiFetch<GameDetail>(`/api/games/${gameId}`);
+  return apiFetch<GameDetail>(`/colonist/api/games/${gameId}`);
 }
 
 export function getGameTimeline(gameId: string): Promise<GameTimeline> {
-  return apiFetch<GameTimeline>(`/api/games/${gameId}/timeline`);
+  return apiFetch<GameTimeline>(`/colonist/api/games/${gameId}/timeline`);
 }
 
 export function getPlayerStats(): Promise<PlayerAggregateStats[]> {
-  return apiFetch<PlayerAggregateStats[]>("/api/stats/players");
+  return apiFetch<PlayerAggregateStats[]>("/colonist/api/stats/players");
 }
 
 export function getStatsOverview(): Promise<StatsOverview> {
-  return apiFetch<StatsOverview>("/api/stats/overview");
+  return apiFetch<StatsOverview>("/colonist/api/stats/overview");
 }
 
 export function getPlayerGameRows(): Promise<PlayerGameRow[]> {
-  return apiFetch<PlayerGameRow[]>("/api/stats/player-games");
+  return apiFetch<PlayerGameRow[]>("/colonist/api/stats/player-games");
 }

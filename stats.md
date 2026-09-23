@@ -193,7 +193,7 @@ turns_blocked}`.
 
 ## Cross-game aggregate stats (`/stats` page)
 
-### `PlayerAggregateStats` (`GET /api/stats/players`)
+### `PlayerAggregateStats` (`GET /colonist/api/stats/players`)
 
 One row per distinct player (grouped by `user_id`) across every stored
 game -- `get_player_stats()` in `server/services/game_queries.py`, a Mongo
@@ -201,7 +201,7 @@ game -- `get_player_stats()` in `server/services/game_queries.py`, a Mongo
 `wins` (count where `is_winner`), `win_rate` (`wins / games_played`),
 `avg_final_victory_points`, `avg_rank`.
 
-### `PlayerGameRow` (`GET /api/stats/player-games`)
+### `PlayerGameRow` (`GET /colonist/api/stats/player-games`)
 
 One flat row per (game, player) observation, deliberately **not**
 aggregated -- `get_player_game_rows()`, a `$project` (no `$group`) so
@@ -215,7 +215,7 @@ field already described above (`victory_point_percentage`,
 `successful_trades`, `dev_cards_bought`, `dev_cards_used`,
 `knight_cards_played`, `production_lost_to_robber`).
 
-### `StatsOverview` (`GET /api/stats/overview`)
+### `StatsOverview` (`GET /colonist/api/stats/overview`)
 
 `get_stats_overview()`: `total_games`, `avg_duration_ms`,
 `avg_total_turns` (all `$group` averages over `games`), and

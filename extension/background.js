@@ -1,7 +1,7 @@
 const MAX_CAPTURES = 25;
 const MAX_CAPTURE_AGE_MS = 24 * 60 * 60 * 1000;
 const PRUNE_ALARM = "prune-expired-captures";
-const DEFAULT_BACKEND_URL = "http://localhost:8000/api/games/ingest";
+const DEFAULT_BACKEND_URL = "http://localhost:8000/colonist/api/games/ingest";
 
 function extractGameId(payload) {
   const data = payload?.data ?? payload;

@@ -20,7 +20,7 @@ or paste a captured payload manually via the dashboard's `/ingest` page.
   `chrome.storage.local`, badges the toolbar icon, and immediately attempts to
   send each freshly captured game to the backend (`POST`s
   `{"raw": <payload>}` to the configured backend URL — `server`'s
-  `POST /api/games/ingest` endpoint accepts this shape directly) — no popup
+  `POST /colonist/api/games/ingest` endpoint accepts this shape directly) — no popup
   interaction needed for the common case.
 - The popup lists captures with two actions per game: **Download JSON** (saves
   a `colonist-game-<id>.json` file via `chrome.downloads`) and **Send to
@@ -67,7 +67,7 @@ the backend).
 
 ## Backend URL
 
-Defaults to `http://localhost:8000/api/games/ingest` (already covered by the
+Defaults to `http://localhost:8000/colonist/api/games/ingest` (already covered by the
 manifest's `host_permissions`, so no CORS setup is needed on the FastAPI side
 for the default case). Changing the URL in the popup requests permission for
 that origin on save — needed because Chrome extensions bypass CORS only for
@@ -75,10 +75,10 @@ origins they hold host permission for.
 
 ## Authorizing the extension
 
-`POST /api/games/ingest` requires a bearer token (see `server/services/auth.py`'s
+`POST /colonist/api/games/ingest` requires a bearer token (see `server/services/auth.py`'s
 `require_admin_or_ingest_token`). Since the extension can't do an interactive
 login, it uses the single shared ingest API token an admin generates on the
-dashboard's `/admin` page (`GET`/`POST /api/admin/ingest-token*`, admin-only).
+dashboard's `/admin` page (`GET`/`POST /colonist/api/admin/ingest-token*`, admin-only).
 Paste that token into the popup's **API token** field and click **Save** — it's
 stored in `chrome.storage.local` and attached to every send, automatic or
 manual. A 401 (e.g. after an admin regenerates the token) clears the stored

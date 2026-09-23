@@ -20,7 +20,7 @@ class FetchResult(BaseModel):
 
 class RawGameExport(BaseModel):
     """One `raw_games` document, verbatim -- the shape both `GET
-    /api/admin/export` produces and `POST /api/admin/import` consumes, so a
+    /colonist/api/admin/export` produces and `POST /colonist/api/admin/import` consumes, so a
     downloaded export can be re-uploaded unmodified."""
 
     game_id: str

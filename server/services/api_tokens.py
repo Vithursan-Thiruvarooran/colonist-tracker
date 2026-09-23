@@ -1,7 +1,7 @@
 """The single shared bearer token the Chrome capture extension uses to call
-`POST /api/games/ingest` -- the extension can't do an interactive login (see
+`POST /colonist/api/games/ingest` -- the extension can't do an interactive login (see
 extension/README.md), so instead of a user session it holds this one static
-token, admin-managed via `GET/POST /api/admin/ingest-token*`.
+token, admin-managed via `GET/POST /colonist/api/admin/ingest-token*`.
 
 Stored as a singleton document (`_id: "ingest"`) rather than per-user, since
 there's exactly one extension install to authorize (see the plan discussion:

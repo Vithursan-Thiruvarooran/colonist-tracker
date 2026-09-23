@@ -157,7 +157,7 @@ export default function Admin() {
       />
       <Panel className="mb-6 max-w-2xl">
         <p className="mb-3 text-sm text-ink-dim">
-          Paste this into the extension's popup. It authorizes <InlineCode>POST /api/games/ingest</InlineCode> in
+          Paste this into the extension's popup. It authorizes <InlineCode>POST /colonist/api/games/ingest</InlineCode> in
           place of a login -- regenerating invalidates the old token immediately.
         </p>
         <div className="flex flex-wrap items-center gap-2">

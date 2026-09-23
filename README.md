@@ -47,7 +47,7 @@ Ingest a captured payload through the dashboard's `/ingest` page, the Chrome
 extension (below), or directly:
 
 ```bash
-curl -X POST localhost:8000/api/games/ingest \
+curl -X POST localhost:8000/colonist/api/games/ingest \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer <admin token or ingest API token>' \
   -d '{"raw": { ... }}'
@@ -76,17 +76,17 @@ for the full storage architecture, which is kept more current than this file.
 }
 ```
 
-`GET /api/games` lists stored games (paginated, filterable by player);
-`GET /api/games/{game_id}` returns one game's full detail;
-`GET /api/games/{game_id}/timeline` returns its turn-by-turn replay data;
-`GET /api/stats/*` serves the dashboard's cross-game stats. See
+`GET /colonist/api/games` lists stored games (paginated, filterable by player);
+`GET /colonist/api/games/{game_id}` returns one game's full detail;
+`GET /colonist/api/games/{game_id}/timeline` returns its turn-by-turn replay data;
+`GET /colonist/api/stats/*` serves the dashboard's cross-game stats. See
 `server/routes/` for the full list.
 
 ### Auth
 
-Every `/api/admin/*` route requires an admin login (email/username/password,
-`POST /api/users/login`); new accounts stay `pending` until an admin
-approves them. `POST /api/games/ingest` accepts either a logged-in admin's
+Every `/colonist/api/admin/*` route requires an admin login (email/username/password,
+`POST /colonist/api/users/login`); new accounts stay `pending` until an admin
+approves them. `POST /colonist/api/games/ingest` accepts either a logged-in admin's
 bearer token or the single admin-managed ingest API token, so the Chrome
 extension (below) can post captures without an interactive session. See
 "Auth" in `CLAUDE.md` for the full picture.
@@ -97,7 +97,7 @@ The primary way to get a game's replay data into the backend, since
 colonist.io's Cloudflare layer blocks automated requests to the replay
 endpoint: a Manifest V3 Chrome extension that watches the colonist.io tab's
 own network calls to the replay endpoint and posts captured payloads
-straight to `POST /api/games/ingest`, authorized with the ingest API token
+straight to `POST /colonist/api/games/ingest`, authorized with the ingest API token
 from the dashboard's `/admin` page. See `extension/README.md` for load/setup
 instructions.
 
@@ -280,8 +280,8 @@ server/
     api_tokens.py                  # shared ingest API token
     player_registry.py             # link app users to players by username
   routes/
-    games.py                       # POST /api/games/ingest, GET /api/games*
-    stats.py                       # GET /api/stats/*
+    games.py                       # POST /colonist/api/games/ingest, GET /colonist/api/games*
+    stats.py                       # GET /colonist/api/stats/*
     users.py                       # signup/login
     admin.py                       # pending-user approval, ingest token
   scripts/

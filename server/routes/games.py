@@ -14,7 +14,7 @@ from server.services.auth import require_admin_or_ingest_token
 from server.services.game_ingest import ingest_raw_game
 from server.services.game_queries import get_game, get_timeline, list_games
 
-router = APIRouter(prefix="/api/games", tags=["games"])
+router = APIRouter(prefix="/colonist/api/games", tags=["games"])
 
 
 @router.post("/ingest", response_model=FetchResult, dependencies=[Depends(require_admin_or_ingest_token)])
