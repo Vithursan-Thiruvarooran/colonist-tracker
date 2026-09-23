@@ -39,8 +39,8 @@ jobs:
           file: server/Dockerfile
           push: true
           tags: |
-            vithiru/webserver-api:latest
-            vithiru/webserver-api:${{ github.sha }}
+            viththiru/colonist-tracker-api:latest
+            viththiru/colonist-tracker-api:${{ github.sha }}
           # Reuse layers (notably the pip install) across runs.
           cache-from: type=gha
           cache-to: type=gha,mode=max
